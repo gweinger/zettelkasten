@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a personal CLI tool for generating and managing a Zettelkasten knowledge management system from various content sources. The tool generates markdown files compatible with Obsidian, with automatic concept extraction and bidirectional linking.
 
 **Primary Use Cases:**
-1. **Seed Workflow**: Bootstrap Zettelkasten from the Powerful Introvert Podcast RSS feed
+1. **Seed Workflow**: Bootstrap Zettelkasten from a podcast RSS feed
 2. **Update Workflow**: Add content from YouTube videos, podcast episodes, or blog articles
 
 ## Tech Stack

@@ -9,7 +9,7 @@ This tool processes content from various sources and generates interconnected ma
 ## Features
 
 ### 1. Seed Workflow
-Bootstrap your Zettelkasten from the Powerful Introvert Podcast:
+Bootstrap your Zettelkasten a Podcast:
 - Downloads audio files from RSS feed
 - Transcribes using **local Whisper** (runs on your machine, no API costs)
 - Extracts key concepts using Claude 3.5 Sonnet
