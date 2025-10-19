@@ -421,5 +421,152 @@ def config(
         console.print("Use --show to display current configuration")
 
 
+@app.command()
+def vault(
+    action: str = typer.Argument(
+        ...,
+        help="Git action: status, commit, push, pull, log, or diff",
+    ),
+    message: Optional[str] = typer.Option(
+        None,
+        "--message",
+        "-m",
+        help="Commit message (for 'commit' action)",
+    ),
+    auto_add: bool = typer.Option(
+        True,
+        "--auto-add/--no-auto-add",
+        help="Automatically add all changes before committing",
+    ),
+) -> None:
+    """
+    Manage vault version control with git.
+
+    Examples:
+        zk vault status              # Show vault git status
+        zk vault commit -m "message" # Commit changes
+        zk vault push                # Push to remote
+        zk vault pull                # Pull from remote
+        zk vault log                 # Show commit history
+        zk vault diff                # Show uncommitted changes
+    """
+    import subprocess
+
+    try:
+        config = Config.from_env()
+        vault_path = config.vault_path
+
+        # Check if vault is a git repository
+        git_dir = vault_path / ".git"
+        if not git_dir.exists():
+            console.print("[bold red]Error:[/bold red] Vault is not a git repository")
+            console.print(f"\nInitialize it with: cd {vault_path} && git init")
+            raise typer.Exit(1)
+
+        # Map actions to git commands
+        if action == "status":
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "status"],
+                capture_output=True,
+                text=True,
+            )
+            console.print(result.stdout)
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+
+        elif action == "commit":
+            if not message:
+                console.print("[bold red]Error:[/bold red] Commit message required")
+                console.print("Use: zk vault commit -m \"your message\"")
+                raise typer.Exit(1)
+
+            # Auto-add changes if enabled
+            if auto_add:
+                console.print("[dim]Adding all changes...[/dim]")
+                subprocess.run(
+                    ["git", "-C", str(vault_path), "add", "."],
+                    check=True,
+                )
+
+            # Commit
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "commit", "-m", message],
+                capture_output=True,
+                text=True,
+            )
+            console.print(result.stdout)
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+            else:
+                console.print("[green]✓[/green] Changes committed successfully")
+
+        elif action == "push":
+            console.print("[dim]Pushing to remote...[/dim]")
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "push"],
+                capture_output=True,
+                text=True,
+            )
+            console.print(result.stdout)
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+            else:
+                console.print("[green]✓[/green] Pushed to remote successfully")
+
+        elif action == "pull":
+            console.print("[dim]Pulling from remote...[/dim]")
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "pull"],
+                capture_output=True,
+                text=True,
+            )
+            console.print(result.stdout)
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+            else:
+                console.print("[green]✓[/green] Pulled from remote successfully")
+
+        elif action == "log":
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "log", "--oneline", "--graph", "--decorate", "-20"],
+                capture_output=True,
+                text=True,
+            )
+            console.print(result.stdout)
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+
+        elif action == "diff":
+            result = subprocess.run(
+                ["git", "-C", str(vault_path), "diff"],
+                capture_output=True,
+                text=True,
+            )
+            if result.stdout:
+                console.print(result.stdout)
+            else:
+                console.print("[dim]No uncommitted changes[/dim]")
+            if result.returncode != 0:
+                console.print(f"[red]{result.stderr}[/red]")
+                raise typer.Exit(result.returncode)
+
+        else:
+            console.print(f"[bold red]Error:[/bold red] Unknown action '{action}'")
+            console.print("\nSupported actions: status, commit, push, pull, log, diff")
+            raise typer.Exit(1)
+
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold red]Git error:[/bold red] {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

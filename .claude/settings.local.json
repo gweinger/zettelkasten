@@ -4,7 +4,10 @@
       "Bash(tree vault/staging/)",
       "Bash(zk staging --show-content)",
       "Bash(zk approve)",
-      "Bash(git add .)"
+      "Bash(git add .)",
+      "Bash(git rm --cached .obsidian/* .DS_Store)",
+      "Bash(zk vault commit -m \"Add test note for version control demo\")",
+      "Bash(zk vault log)"
     ],
     "deny": [],
     "ask": []
