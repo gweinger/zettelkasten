@@ -1,0 +1,3 @@
+# Zettelkasten Project Marker
+# This file marks the root of a Zettelkasten project.
+# It allows the zk CLI to work from any subdirectory within the project.
