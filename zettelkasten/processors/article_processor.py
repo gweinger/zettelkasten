@@ -96,8 +96,10 @@ class ArticleProcessor:
 
         for element in content_elements:
             if element:
-                # Extract text from paragraphs
-                paragraphs = element.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li"])
+                # Extract text from paragraphs and headings
+                # Note: Don't include 'li' tags as they're nested in other elements
+                # and would cause duplicate text extraction
+                paragraphs = element.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])
                 text = "\n\n".join(p.get_text().strip() for p in paragraphs if p.get_text().strip())
                 if text:
                     return text
