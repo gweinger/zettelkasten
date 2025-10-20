@@ -9,7 +9,7 @@ from zettelkasten.core.models import (
     ContentType,
 )
 from zettelkasten.core.config import Config
-from zettelkasten.utils.vault_scanner import find_matching_concept
+from zettelkasten.processors.concept_extractor import ConceptExtractor
 
 
 class ZettelGenerator:
@@ -18,6 +18,8 @@ class ZettelGenerator:
     def __init__(self, config: Config):
         self.config = config
         self.config.ensure_directories()
+        # Initialize concept extractor for intelligent matching
+        self.concept_extractor = ConceptExtractor(config)
 
     def generate_source_note(
         self,
@@ -270,9 +272,11 @@ class ZettelGenerator:
         # Create a timestamp for this batch
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-        # Check for duplicate concepts and mark them for merging
+        # Check for duplicate concepts using intelligent matching
         for concept in concepts:
-            existing = find_matching_concept(concept.name, self.config)
+            existing = self.concept_extractor.find_matching_concept_intelligent(
+                concept.name, concept.description, self.config
+            )
             if existing:
                 # Mark concept for merging into existing note
                 concept.is_new = False

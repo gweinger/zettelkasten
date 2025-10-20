@@ -1,7 +1,9 @@
 """Concept extraction using Claude for Zettelkasten generation."""
 
 import json
-from typing import List
+import re
+from typing import List, Optional, Dict
+from pathlib import Path
 from anthropic import Anthropic
 from zettelkasten.core.models import Concept
 from zettelkasten.core.config import Config
@@ -362,3 +364,139 @@ The type must be either "concept" or "source"."""
         except json.JSONDecodeError:
             # Default to concept if parsing fails
             return "concept"
+
+    def find_matching_concept_intelligent(
+        self, concept_name: str, concept_description: str, config: Config
+    ) -> Optional[Dict[str, str]]:
+        """
+        Use Claude to intelligently match a concept against existing concepts in the vault.
+
+        This method reads the concept index and uses semantic understanding to determine
+        if the new concept already exists (even if named differently).
+
+        Args:
+            concept_name: Name of the new concept
+            concept_description: Description of the new concept
+            config: Application configuration
+
+        Returns:
+            Dict with 'title' and 'filepath' if a match is found, None otherwise
+        """
+        # Read the concept index
+        index_path = config.get_permanent_notes_path() / "INDEX.md"
+        if not index_path.exists():
+            return None
+
+        index_content = index_path.read_text()
+
+        # Extract only the concepts section from the index
+        # The index has sections like "## A", "## B", etc. with concepts listed under them
+        concepts_section = ""
+        in_concepts = False
+        for line in index_content.split("\n"):
+            if line.startswith("## "):
+                in_concepts = True
+            if in_concepts:
+                concepts_section += line + "\n"
+
+        if not concepts_section.strip():
+            return None
+
+        prompt = f"""You are an expert at analyzing concepts for a Zettelkasten knowledge base.
+
+I have a NEW CONCEPT that needs to be added, but first I need to check if it already exists (possibly under a different name or as part of a broader concept).
+
+NEW CONCEPT:
+Name: {concept_name}
+Description: {concept_description}
+
+EXISTING CONCEPTS IN THE KNOWLEDGE BASE:
+{concepts_section}
+
+Task: Determine if this new concept is semantically the same as (or a clear subset of) any existing concept.
+
+Guidelines:
+- Look for concepts that cover the same core idea, even if worded differently
+- Consider if the new concept would be redundant with an existing one
+- Be conservative: only match if they're clearly about the same thing
+- Don't match if the new concept adds significant new perspective
+
+Return your analysis as JSON:
+{{
+  "is_duplicate": true or false,
+  "matching_concept_title": "Exact Title of Matching Concept" or null,
+  "reasoning": "Brief explanation of why it matches or doesn't match"
+}}
+
+IMPORTANT: Return ONLY valid JSON. If it's a duplicate, matching_concept_title must be the EXACT title as it appears in the existing concepts list."""
+
+        response = self.client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=512,
+            temperature=0.3,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        # Parse response
+        content_text = response.content[0].text
+
+        # Extract JSON
+        if "```json" in content_text:
+            json_start = content_text.find("```json") + 7
+            json_end = content_text.find("```", json_start)
+            content_text = content_text[json_start:json_end].strip()
+        elif "```" in content_text:
+            json_start = content_text.find("```") + 3
+            json_end = content_text.find("```", json_start)
+            content_text = content_text[json_start:json_end].strip()
+
+        try:
+            data = json.loads(content_text)
+            is_duplicate = data.get("is_duplicate", False)
+            matching_title = data.get("matching_concept_title")
+
+            if not is_duplicate or not matching_title:
+                return None
+
+            # Find the actual file for this concept
+            # We need to search the permanent notes directory for a file with this title
+            permanent_notes_path = config.get_permanent_notes_path()
+
+            # Search for a markdown file with matching title in frontmatter or heading
+            for filepath in permanent_notes_path.glob("*.md"):
+                if filepath.stem.upper() == "INDEX":
+                    continue
+
+                try:
+                    file_content = filepath.read_text()
+
+                    # Check frontmatter title
+                    frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", file_content, re.DOTALL)
+                    if frontmatter_match:
+                        frontmatter = frontmatter_match.group(1)
+                        for line in frontmatter.split("\n"):
+                            if line.startswith("title:"):
+                                title = line.split(":", 1)[1].strip()
+                                if title == matching_title:
+                                    return {
+                                        "title": matching_title,
+                                        "filepath": str(filepath)
+                                    }
+
+                    # Check first heading
+                    heading_match = re.search(r"^#\s+(.+)$", file_content, re.MULTILINE)
+                    if heading_match:
+                        title = heading_match.group(1).strip()
+                        if title == matching_title:
+                            return {
+                                "title": matching_title,
+                                "filepath": str(filepath)
+                            }
+                except Exception:
+                    continue
+
+            return None
+
+        except json.JSONDecodeError:
+            # If parsing fails, return None (no match)
+            return None

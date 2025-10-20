@@ -8,6 +8,7 @@ from collections import defaultdict
 
 from zettelkasten.core.config import Config
 from zettelkasten.core.models import ContentType
+from zettelkasten.processors.concept_extractor import ConceptExtractor
 
 
 class NoteMetadata:
@@ -36,6 +37,8 @@ class IndexGenerator:
     def __init__(self, config: Config):
         self.config = config
         self.config.ensure_directories()
+        # Initialize concept extractor for generating summaries
+        self.concept_extractor = ConceptExtractor(config)
 
     def rebuild_indices(self) -> Dict[str, Path]:
         """
@@ -113,9 +116,15 @@ class IndexGenerator:
             lines.append(f"## {letter}")
             lines.append("")
             for note in grouped_notes[letter]:
-                # Create relative link to the note
+                # Create relative link to the note with description
                 relative_filename = note.filepath.stem
-                lines.append(f"- [[{relative_filename}|{note.title}]]")
+
+                # Try to extract a brief description from the note content
+                description = self._extract_description(Path(note.filepath))
+                if description:
+                    lines.append(f"- **[[{relative_filename}|{note.title}]]**: {description}")
+                else:
+                    lines.append(f"- [[{relative_filename}|{note.title}]]")
             lines.append("")
 
         # Write index file
@@ -278,3 +287,55 @@ class IndexGenerator:
                 frontmatter[key] = value
 
         return frontmatter
+
+    def _extract_description(self, filepath: Path) -> Optional[str]:
+        """
+        Generate a one-line summary of the note content using Claude.
+
+        Args:
+            filepath: Path to markdown file
+
+        Returns:
+            Brief one-line summary or None
+        """
+        try:
+            content = filepath.read_text()
+
+            # Skip frontmatter
+            if content.startswith("---"):
+                end_frontmatter = content.find("---", 3)
+                if end_frontmatter != -1:
+                    content = content[end_frontmatter + 3:].strip()
+
+            # Get title
+            title = None
+            if content.startswith("# "):
+                title = content.split("\n")[0].replace("# ", "").strip()
+
+            # Use Claude to generate a concise one-line summary
+            prompt = f"""Generate a single-line summary (max 150 characters) of this concept note.
+
+Title: {title or filepath.stem}
+
+Content:
+{content[:2000]}
+
+Return ONLY the summary text, no other commentary. Keep it under 150 characters."""
+
+            response = self.concept_extractor.client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=100,
+                temperature=0.5,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            summary = response.content[0].text.strip()
+
+            # Truncate if too long
+            if len(summary) > 150:
+                summary = summary[:147] + "..."
+
+            return summary
+
+        except Exception:
+            return None
