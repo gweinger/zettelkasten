@@ -236,11 +236,17 @@ def staging(
         "-c",
         help="Show first few lines of each file",
     ),
+    clean: bool = typer.Option(
+        False,
+        "--clean",
+        help="Delete all files in the staging area",
+    ),
 ) -> None:
     """
     List all files currently in the staging area.
 
     Shows files waiting for review before being approved into the vault.
+    Use --clean to delete all staged files.
     """
     try:
         config = Config.from_env()
@@ -254,6 +260,32 @@ def staging(
             console.print("\n[dim]Process URLs with 'zk add <url>' to generate notes in staging.[/dim]")
             return
 
+        # Handle clean option
+        if clean:
+            console.print(f"\n[bold yellow]⚠️  Warning:[/bold yellow] About to delete {len(staged_files)} file(s) from staging.\n")
+
+            # Show what will be deleted
+            for filepath in staged_files:
+                relative_path = filepath.relative_to(staging_path)
+                console.print(f"[red]✗[/red] {relative_path}")
+
+            # Confirm deletion
+            confirm = typer.confirm("\nAre you sure you want to delete all staged files?")
+            if not confirm:
+                console.print("[yellow]Cancelled.[/yellow]")
+                return
+
+            # Delete all files
+            deleted_count = 0
+            for filepath in staged_files:
+                filepath.unlink()
+                deleted_count += 1
+
+            console.print(f"\n[bold green]Complete![/bold green]")
+            console.print(f"Deleted: [red]{deleted_count}[/red] file(s)")
+            return
+
+        # List files in staging
         console.print(f"\n[bold cyan]Staging Area ({len(staged_files)} file(s)):[/bold cyan]\n")
 
         for filepath in staged_files:
@@ -273,6 +305,7 @@ def staging(
 
         console.print(f"\n[dim]Staging location: {staging_path}[/dim]")
         console.print("[yellow]Run 'zk approve' to move these files to your vault.[/yellow]")
+        console.print("[yellow]Run 'zk staging --clean' to delete all staged files.[/yellow]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
