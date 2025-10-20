@@ -420,6 +420,9 @@ class ZettelGenerator:
         """Generate concept notes using filename-based links."""
         notes = []
 
+        # Generate timestamp string for stub links
+        timestamp = created_at.strftime("%Y%m%d%H%M%S")
+
         for concept in concepts:
             lines = []
 
@@ -452,8 +455,12 @@ class ZettelGenerator:
                     related_filename = filename_map[related]
                     links.append(f"permanent-notes/{related_filename}|{related}")
                 else:
-                    # It doesn't exist - create a stub link (just the name)
-                    links.append(related)
+                    # It doesn't exist yet - create a stub link with timestamp and path
+                    # so when the file is eventually created, the link will work
+                    stub_slug = related.lower().replace(" ", "-")
+                    stub_slug = "".join(c for c in stub_slug if c.isalnum() or c == "-")
+                    stub_filename = f"{timestamp}-{stub_slug}"
+                    links.append(f"permanent-notes/{stub_filename}|{related}")
 
             note = ZettelNote(
                 title=concept.name,
