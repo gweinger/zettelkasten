@@ -3,11 +3,19 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import Optional
+from pathlib import Path
+from datetime import datetime
+import hashlib
 from zettelkasten.core.models import ProcessedContent, ContentType
+from zettelkasten.core.config import Config
 
 
 class ArticleProcessor:
     """Process web articles - extract text content and metadata."""
+
+    def __init__(self, config: Config):
+        """Initialize with configuration."""
+        self.config = config
 
     def process(self, url: str) -> ProcessedContent:
         """
@@ -44,6 +52,10 @@ class ArticleProcessor:
             "published_date": self._extract_meta(soup, "article:published_time"),
             "site_name": self._extract_meta(soup, "og:site_name"),
         }
+
+        # Save full text to file for future reference
+        article_file = self._save_full_text(url, title, text_content, metadata)
+        metadata["article_file"] = str(article_file)
 
         return ProcessedContent(
             url=url,
@@ -109,3 +121,45 @@ class ArticleProcessor:
             return meta.get("content")
 
         return None
+
+    def _save_full_text(self, url: str, title: str, text_content: str, metadata: dict) -> Path:
+        """
+        Save article full text to a file for future reference.
+
+        Args:
+            url: Article URL
+            title: Article title
+            text_content: Extracted text content
+            metadata: Article metadata
+
+        Returns:
+            Path to the saved file
+        """
+        # Generate filename using timestamp and URL hash for uniqueness
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+        filename = f"{timestamp}-{url_hash}.txt"
+
+        # Save to articles directory
+        article_file = self.config.articles_path / filename
+
+        # Build file content with metadata header
+        lines = []
+        lines.append("=" * 80)
+        lines.append(f"TITLE: {title}")
+        lines.append(f"URL: {url}")
+        lines.append(f"SAVED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        if metadata.get("author"):
+            lines.append(f"AUTHOR: {metadata['author']}")
+        if metadata.get("published_date"):
+            lines.append(f"PUBLISHED: {metadata['published_date']}")
+        if metadata.get("site_name"):
+            lines.append(f"SITE: {metadata['site_name']}")
+        lines.append("=" * 80)
+        lines.append("")
+        lines.append(text_content)
+
+        # Write to file
+        article_file.write_text("\n".join(lines))
+
+        return article_file

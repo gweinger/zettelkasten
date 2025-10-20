@@ -40,6 +40,10 @@ class Config(BaseModel):
         default=Path("./transcripts"),
         description="Path for transcript files",
     )
+    articles_path: Path = Field(
+        default=Path("./articles"),
+        description="Path for saved article full text",
+    )
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -70,6 +74,7 @@ class Config(BaseModel):
             vault_path=Path(os.getenv("VAULT_PATH", "./vault")),
             downloads_path=Path(os.getenv("DOWNLOADS_PATH", "./downloads")),
             transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", "./transcripts")),
+            articles_path=Path(os.getenv("ARTICLES_PATH", "./articles")),
         )
 
     def ensure_directories(self) -> None:
@@ -77,6 +82,7 @@ class Config(BaseModel):
         self.vault_path.mkdir(parents=True, exist_ok=True)
         self.downloads_path.mkdir(parents=True, exist_ok=True)
         self.transcripts_path.mkdir(parents=True, exist_ok=True)
+        self.articles_path.mkdir(parents=True, exist_ok=True)
 
         # Create Zettelkasten subdirectories
         (self.vault_path / "permanent-notes").mkdir(parents=True, exist_ok=True)

@@ -30,7 +30,7 @@ class AddWorkflow:
     def __init__(self, config: Config):
         self.config = config
         self.youtube_processor = YouTubeProcessor(config)
-        self.article_processor = ArticleProcessor()
+        self.article_processor = ArticleProcessor(config)
         self.transcription_service = TranscriptionService(
             config, model_size=config.whisper_model_size
         )
