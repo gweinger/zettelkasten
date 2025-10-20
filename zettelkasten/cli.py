@@ -16,6 +16,228 @@ app = typer.Typer(help="Zettelkasten CLI - Generate and manage your knowledge ba
 console = Console()
 
 
+def merge_notes_intelligently(existing_content: str, new_content: str) -> str:
+    """
+    Merge two notes section by section instead of simple append.
+
+    Sections handled:
+    - Description (after title): Appended as new paragraph
+    - Key Quotes: Merged together
+    - Source/Sources: Combined into Sources section
+    - Related Notes: Merged and deduplicated
+
+    Args:
+        existing_content: The existing note content
+        new_content: The new content to merge in
+
+    Returns:
+        Merged note content
+    """
+    import re
+
+    def parse_sections(content: str) -> dict:
+        """Parse note into sections."""
+        sections = {
+            'frontmatter': '',
+            'title': '',
+            'description': '',
+            'key_quotes': [],
+            'sources': [],
+            'related_notes': []
+        }
+
+        # Extract frontmatter
+        fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+        if fm_match:
+            sections['frontmatter'] = fm_match.group(0)
+            content = content[fm_match.end():]
+
+        # Remove merge banner if present (lines starting with >)
+        lines = content.split('\n')
+        clean_lines = []
+        in_banner = False
+        for line in lines:
+            if line.strip().startswith('> **⚠️ MERGE**'):
+                in_banner = True
+                continue
+            if in_banner and line.strip().startswith('>'):
+                continue
+            if in_banner and not line.strip():
+                in_banner = False
+                continue
+            clean_lines.append(line)
+        content = '\n'.join(clean_lines)
+
+        # Extract title
+        title_match = re.match(r'^#\s+(.+?)\n\n', content, re.MULTILINE)
+        if title_match:
+            sections['title'] = title_match.group(1).strip()
+            content = content[title_match.end():]
+
+        # Split into sections by ## headers
+        lines = content.split('\n')
+        current_section = 'description'
+        current_lines = []
+        skip_mode = False
+
+        for line in lines:
+            # Skip old "## Additional Content" sections and horizontal rules
+            if line.strip() == '---' and current_section == 'related_notes':
+                skip_mode = True
+                continue
+            if skip_mode and line.startswith('## Additional Content'):
+                # Reset - parse content after this as if it's a new note
+                current_section = 'description'
+                current_lines = []
+                skip_mode = False
+                continue
+            if skip_mode and line.startswith('# '):
+                # Found a title in additional content - skip it and continue
+                skip_mode = False
+                continue
+            if skip_mode:
+                continue
+
+            if line.startswith('## '):
+                # Save previous section
+                if current_section == 'description' and current_lines:
+                    sections['description'] = '\n'.join(current_lines).strip()
+                elif current_section == 'key_quotes' and current_lines:
+                    # Extract quotes (lines starting with >)
+                    for l in current_lines:
+                        l = l.strip()
+                        if l.startswith('>'):
+                            sections['key_quotes'].append(l)
+                elif current_section == 'sources' and current_lines:
+                    sections['sources'].extend([l.strip() for l in current_lines if l.strip() and not l.strip().startswith('#')])
+                elif current_section == 'related_notes' and current_lines:
+                    # Extract wiki links
+                    for l in current_lines:
+                        l = l.strip()
+                        if l.startswith('-') and '[[' in l:
+                            sections['related_notes'].append(l)
+
+                current_lines = []
+
+                # Determine new section
+                header = line.lower()
+                if 'key quote' in header:
+                    current_section = 'key_quotes'
+                elif 'source' in header:
+                    current_section = 'sources'
+                elif 'related note' in header:
+                    current_section = 'related_notes'
+                else:
+                    current_section = 'other'
+            else:
+                current_lines.append(line)
+
+        # Save last section
+        if current_section == 'description' and current_lines:
+            sections['description'] = '\n'.join(current_lines).strip()
+        elif current_section == 'key_quotes' and current_lines:
+            # Extract quotes (lines starting with >)
+            for line in current_lines:
+                line = line.strip()
+                if line.startswith('>'):
+                    sections['key_quotes'].append(line)
+        elif current_section == 'sources' and current_lines:
+            sections['sources'].extend([l.strip() for l in current_lines if l.strip() and not l.strip().startswith('#')])
+        elif current_section == 'related_notes' and current_lines:
+            # Extract wiki links
+            for line in current_lines:
+                line = line.strip()
+                if line.startswith('-') and '[[' in line:
+                    sections['related_notes'].append(line)
+
+        return sections
+
+    # Parse both notes
+    existing = parse_sections(existing_content)
+    new = parse_sections(new_content)
+
+    # Build merged content
+    lines = []
+
+    # Frontmatter (keep existing)
+    if existing['frontmatter']:
+        lines.append(existing['frontmatter'].rstrip())
+        lines.append('')
+
+    # Title
+    if existing['title']:
+        lines.append(f"# {existing['title']}")
+        lines.append('')
+
+    # Description - merge both
+    if existing['description']:
+        lines.append(existing['description'])
+        lines.append('')
+    if new['description']:
+        lines.append(new['description'])
+        lines.append('')
+
+    # Key Quotes - combine all quotes
+    all_quotes = existing['key_quotes'] + new['key_quotes']
+    if all_quotes:
+        lines.append('## Key Quotes')
+        lines.append('')
+        for quote in all_quotes:
+            lines.append(quote)
+            lines.append('')
+
+    # Sources - combine and change to plural
+    all_sources = existing['sources'] + new['sources']
+    if all_sources:
+        lines.append('## Sources')
+        lines.append('')
+        # Group sources - look for From: or URL: patterns
+        current_source_group = []
+        for source in all_sources:
+            # Clean up "From:" prefix if present
+            source = source.replace('From: ', '')
+            if source and not source.startswith('##'):
+                if source.startswith('URL:'):
+                    # End of a source group
+                    current_source_group.append(source)
+                    # Write the group
+                    for line in current_source_group:
+                        lines.append(line)
+                    lines.append('')
+                    current_source_group = []
+                else:
+                    current_source_group.append(source)
+
+        # Handle any remaining sources
+        if current_source_group:
+            for line in current_source_group:
+                lines.append(line)
+            lines.append('')
+
+    # Related Notes - merge and deduplicate
+    all_related = existing['related_notes'] + new['related_notes']
+    # Deduplicate by the wiki link itself
+    seen = set()
+    unique_related = []
+    for note in all_related:
+        # Extract the wiki link for deduplication
+        link_match = re.search(r'\[\[([^\]]+)\]\]', note)
+        if link_match:
+            link = link_match.group(1)
+            if link not in seen:
+                seen.add(link)
+                unique_related.append(note)
+
+    if unique_related:
+        lines.append('## Related Notes')
+        lines.append('')
+        for note in unique_related:
+            lines.append(note)
+        lines.append('')
+
+    return '\n'.join(lines).rstrip() + '\n'
+
+
 @app.command()
 def seed(
     rss_feed: Optional[str] = typer.Option(
@@ -186,8 +408,8 @@ def approve(
                             new_content = '\n'.join([l for l in lines if not l.strip().startswith('>')])
                             new_content = new_content.strip()
 
-                        # Append new content to existing note
-                        merged_content = existing_content.rstrip() + "\n\n---\n\n## Additional Content\n\n" + new_content
+                        # Intelligent section-by-section merge
+                        merged_content = merge_notes_intelligently(existing_content, new_content)
                         target_path.write_text(merged_content)
 
                         # Delete the staging file
