@@ -1,5 +1,6 @@
 """Generate Zettelkasten notes from processed content."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from zettelkasten.core.models import (
@@ -150,6 +151,7 @@ class ZettelGenerator:
                 tags=["concept", "permanent-note"],
                 links=links,
                 source_url=source_url,
+                created_at=created_at,
                 metadata={
                     "source_title": source_title,
                     "related_concepts": concept.related_concepts,
@@ -269,8 +271,9 @@ class ZettelGenerator:
         """
         from datetime import datetime
 
-        # Create a timestamp for this batch
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        # Create a single timestamp for this entire batch to ensure consistent filenames
+        created_at = datetime.now()
+        timestamp = created_at.strftime("%Y%m%d%H%M%S")
 
         # Check for duplicate concepts using intelligent matching
         for concept in concepts:
@@ -321,6 +324,7 @@ class ZettelGenerator:
             summary=summary,
             concepts=concepts,
             filename_map=filename_map,
+            created_at=created_at,
         )
 
         # Generate concept notes with filename-based links
@@ -329,6 +333,7 @@ class ZettelGenerator:
             source_title=content.title,
             source_url=source_url,
             filename_map=filename_map,
+            created_at=created_at,
         )
 
         # Save all notes
@@ -341,6 +346,7 @@ class ZettelGenerator:
         summary: str,
         concepts: List[Concept],
         filename_map: dict,
+        created_at: datetime,
     ) -> ZettelNote:
         """Generate source note using filename-based links."""
         lines = []
@@ -399,6 +405,7 @@ class ZettelGenerator:
             links=concept_links,
             source_url=content.url,
             source_type=content.content_type,
+            created_at=created_at,
             metadata=content.metadata,
         )
 
@@ -408,6 +415,7 @@ class ZettelGenerator:
         source_title: str,
         source_url: str,
         filename_map: dict,
+        created_at: datetime,
     ) -> List[ZettelNote]:
         """Generate concept notes using filename-based links."""
         notes = []
@@ -453,6 +461,7 @@ class ZettelGenerator:
                 tags=["concept", "permanent-note"],
                 links=links,
                 source_url=source_url,
+                created_at=created_at,
                 metadata={
                     "source_title": source_title,
                     "related_concepts": concept.related_concepts,
