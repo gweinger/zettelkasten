@@ -223,6 +223,16 @@ def approve(
         if deleted_count > 0:
             console.print(f"Deleted: [red]{deleted_count}[/red] file(s)")
 
+        # Rebuild indices if any files were approved
+        if approved_count > 0:
+            console.print("\n[cyan]Rebuilding indices...[/cyan]")
+            try:
+                index_generator = IndexGenerator(config)
+                indices = index_generator.rebuild_indices()
+                console.print("[green]✓[/green] Indices updated")
+            except Exception as e:
+                console.print(f"[yellow]⚠[/yellow] Warning: Could not rebuild indices: {e}")
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
