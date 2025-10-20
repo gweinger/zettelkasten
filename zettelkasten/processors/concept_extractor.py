@@ -75,7 +75,9 @@ Return your analysis as a JSON object with this structure:
       "quotes": ["Relevant quote from the text"]
     }}
   ]
-}}"""
+}}
+
+IMPORTANT: Return ONLY valid JSON. Do NOT use smart quotes or curly quotes. Escape any quotes inside strings properly with backslashes."""
 
         response = self.client.messages.create(
             model="claude-3-haiku-20240307",
@@ -114,8 +116,30 @@ Return your analysis as a JSON object with this structure:
             # Remove trailing commas before closing brackets/braces
             fixed_text = re.sub(r',(\s*[}\]])', r'\1', content_text)
 
-            # Try to fix unescaped quotes in strings
-            # This is a simple heuristic - not perfect but handles common cases
+            # Try to manually fix unescaped quotes by using a simple heuristic:
+            # Replace quotes inside string values (between ": " and ",)
+            # This is imperfect but handles the most common case
+            lines = fixed_text.split('\n')
+            fixed_lines = []
+            for line in lines:
+                # If line contains both ": " and ends with "," it's likely a JSON value
+                if '": "' in line and (line.rstrip().endswith('",') or line.rstrip().endswith('"')):
+                    # Find the value part after ": "
+                    parts = line.split('": "', 1)
+                    if len(parts) == 2:
+                        key_part = parts[0] + '": "'
+                        value_part = parts[1]
+                        # Escape quotes in the value part (but not the closing quote)
+                        if value_part.rstrip().endswith('",'):
+                            value_content = value_part[:-2]  # Remove trailing ",
+                            value_fixed = value_content.replace('"', '\\"')
+                            line = key_part + value_fixed + '",'
+                        elif value_part.rstrip().endswith('"'):
+                            value_content = value_part[:-1]  # Remove trailing "
+                            value_fixed = value_content.replace('"', '\\"')
+                            line = key_part + value_fixed + '"'
+                fixed_lines.append(line)
+            fixed_text = '\n'.join(fixed_lines)
 
             try:
                 data = json.loads(fixed_text)
