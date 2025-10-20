@@ -33,19 +33,19 @@ class Config(BaseModel):
         description="Path to Obsidian vault",
     )
     sources_path: Path = Field(
-        default=Path("./sources"),
+        default=Path("./vault/_sources"),
         description="Path for source materials (downloads, transcripts, articles)",
     )
     downloads_path: Path = Field(
-        default=Path("./sources/downloads"),
+        default=Path("./vault/_sources/downloads"),
         description="Path for downloaded audio/video files",
     )
     transcripts_path: Path = Field(
-        default=Path("./sources/transcripts"),
+        default=Path("./vault/_sources/transcripts"),
         description="Path for transcript files",
     )
     articles_path: Path = Field(
-        default=Path("./sources/articles"),
+        default=Path("./vault/_sources/articles"),
         description="Path for saved article full text",
     )
 
@@ -71,14 +71,17 @@ class Config(BaseModel):
         # Load .env from project root
         load_dotenv(project_root / ".env")
 
-        # Get base sources path
-        sources_base = Path(os.getenv("SOURCES_PATH", "./sources"))
+        # Get vault path first
+        vault_path = Path(os.getenv("VAULT_PATH", "./vault"))
+
+        # Get base sources path (defaults to vault/_sources)
+        sources_base = Path(os.getenv("SOURCES_PATH", str(vault_path / "_sources")))
 
         return cls(
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
             podcast_rss_feed=os.getenv("PODCAST_RSS_FEED", ""),
-            vault_path=Path(os.getenv("VAULT_PATH", "./vault")),
+            vault_path=vault_path,
             sources_path=sources_base,
             downloads_path=Path(os.getenv("DOWNLOADS_PATH", str(sources_base / "downloads"))),
             transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", str(sources_base / "transcripts"))),

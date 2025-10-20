@@ -56,8 +56,7 @@ vault/
 # Obsidian settings (vault-specific)
 .obsidian/
 
-# Source materials (audio/video, transcripts, articles)
-sources/
+# Audio/video file types (anywhere in project)
 *.mp3
 *.mp4
 *.wav
