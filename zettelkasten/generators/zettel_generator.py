@@ -427,16 +427,16 @@ class ZettelGenerator:
 
             lines.append("## Source")
             lines.append("")
-            # Use filename for source link with path to sources
+            # Use filename for source link with relative path from permanent-notes to sources
             source_filename = filename_map.get(source_title, source_title)
-            lines.append(f"From: [[sources/{source_filename}|{source_title}]]")
+            lines.append(f"From: [[../sources/{source_filename}|{source_title}]]")
             lines.append(f"URL: {source_url}")
             lines.append("")
 
             note_content = "\n".join(lines)
 
-            # Links using filenames with paths and display names
-            links = [f"sources/{source_filename}|{source_title}"]
+            # Links using filenames with relative paths and display names
+            links = [f"../sources/{source_filename}|{source_title}"]
             for related in concept.related_concepts:
                 # Check if this concept has a file in our batch
                 if related in filename_map:
