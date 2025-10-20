@@ -1,7 +1,7 @@
 """Main workflow orchestration for processing content into Zettelkasten."""
 
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -51,6 +51,16 @@ class AddWorkflow:
         # Validate URL
         if not is_valid_url(url):
             raise ValueError(f"Invalid URL: {url}")
+
+        # Check if URL has already been processed (unless force=True)
+        if not force:
+            existing = self._check_url_exists(url)
+            if existing:
+                raise ValueError(
+                    f"URL already processed. Found existing source note:\n"
+                    f"  {existing.relative_to(self.config.vault_path)}\n\n"
+                    f"Use --force to reprocess anyway."
+                )
 
         console.print(f"\n[bold cyan]Processing:[/bold cyan] {url}\n")
 
@@ -150,6 +160,54 @@ class AddWorkflow:
             return transcript.text
         else:
             raise ValueError("No text or audio content available")
+
+    def _check_url_exists(self, url: str) -> Optional[Path]:
+        """
+        Check if a URL has already been processed by searching source notes.
+
+        Args:
+            url: URL to check
+
+        Returns:
+            Path to existing source note if found, None otherwise
+        """
+        import re
+
+        # Normalize URL for comparison (remove trailing slashes, fragments, etc.)
+        normalized_url = url.rstrip('/').split('#')[0].split('?')[0]
+
+        # Search in both sources/ (approved) and staging/sources/ (pending approval)
+        search_dirs = [
+            self.config.get_sources_path(),
+            self.config.get_staging_path() / "sources",
+        ]
+
+        for directory in search_dirs:
+            if not directory.exists():
+                continue
+
+            for note_file in directory.glob("*.md"):
+                try:
+                    content = note_file.read_text()
+
+                    # Extract frontmatter
+                    fm_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+                    if fm_match:
+                        frontmatter = fm_match.group(1)
+                        # Look for source or source_url in frontmatter
+                        for line in frontmatter.split('\n'):
+                            # Check both 'source:' and 'source_url:' (models.py writes it as 'source:')
+                            if line.startswith('source:') or line.startswith('source_url:'):
+                                existing_url = line.split(':', 1)[1].strip().strip('"\'')
+                                # Normalize existing URL for comparison
+                                normalized_existing = existing_url.rstrip('/').split('#')[0].split('?')[0]
+                                if normalized_existing == normalized_url:
+                                    return note_file
+                except Exception:
+                    # Skip files that can't be read
+                    continue
+
+        return None
 
 
 class ImportWorkflow:
