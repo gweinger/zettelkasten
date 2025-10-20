@@ -150,20 +150,71 @@ def approve(
                 deleted_count += 1
                 console.print(f"  [red]✗[/red] Deleted")
             else:
-                # Determine destination based on staging subdirectory
-                if "concepts" in filepath.parts:
-                    destination_dir = config.get_permanent_notes_path()
-                elif "sources" in filepath.parts:
-                    destination_dir = config.get_sources_path()
-                else:
-                    # Default to vault root
-                    destination_dir = config.vault_path
+                # Check if this is a merge operation
+                import re
+                content = filepath.read_text()
 
-                # Move file to destination
-                destination = destination_dir / filepath.name
-                shutil.move(str(filepath), str(destination))
-                approved_count += 1
-                console.print(f"  [green]✓[/green] Moved to {destination.relative_to(config.vault_path)}")
+                # Extract frontmatter
+                frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+                is_merge = False
+                merge_target = None
+
+                if frontmatter_match:
+                    frontmatter = frontmatter_match.group(1)
+                    for line in frontmatter.split('\n'):
+                        if line.startswith('merge_into:'):
+                            merge_target = line.split(':', 1)[1].strip()
+                        if line.startswith('is_new:'):
+                            is_new_val = line.split(':', 1)[1].strip()
+                            is_merge = (is_new_val.lower() == 'false')
+
+                if is_merge and merge_target:
+                    # This is a merge operation
+                    target_path = config.get_permanent_notes_path() / merge_target
+                    if target_path.exists():
+                        # Read the existing note
+                        existing_content = target_path.read_text()
+
+                        # Extract new content (skip frontmatter and merge banner)
+                        new_content_start = content.find('---', 3) + 3  # Skip first ---...---
+                        new_content = content[new_content_start:].strip()
+
+                        # Remove merge banner if present
+                        if new_content.startswith('>'):
+                            lines = new_content.split('\n')
+                            # Skip lines starting with '>' (the banner)
+                            new_content = '\n'.join([l for l in lines if not l.strip().startswith('>')])
+                            new_content = new_content.strip()
+
+                        # Append new content to existing note
+                        merged_content = existing_content.rstrip() + "\n\n---\n\n## Additional Content\n\n" + new_content
+                        target_path.write_text(merged_content)
+
+                        # Delete the staging file
+                        filepath.unlink()
+                        approved_count += 1
+                        console.print(f"  [blue]🔀[/blue] Merged into {merge_target}")
+                    else:
+                        console.print(f"  [yellow]⚠[/yellow] Target not found: {merge_target}, creating new instead")
+                        # Fall back to creating new
+                        destination_dir = config.get_permanent_notes_path()
+                        destination = destination_dir / filepath.name
+                        shutil.move(str(filepath), str(destination))
+                        approved_count += 1
+                        console.print(f"  [green]✓[/green] Created at {destination.relative_to(config.vault_path)}")
+                else:
+                    # Normal move operation
+                    if "concepts" in filepath.parts:
+                        destination_dir = config.get_permanent_notes_path()
+                    elif "sources" in filepath.parts:
+                        destination_dir = config.get_sources_path()
+                    else:
+                        destination_dir = config.vault_path
+
+                    destination = destination_dir / filepath.name
+                    shutil.move(str(filepath), str(destination))
+                    approved_count += 1
+                    console.print(f"  [green]✓[/green] Moved to {destination.relative_to(config.vault_path)}")
 
         # Summary
         console.print(f"\n[bold green]Complete![/bold green]")

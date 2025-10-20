@@ -44,6 +44,9 @@ class Concept(BaseModel):
     description: str
     related_concepts: List[str] = Field(default_factory=list)
     quotes: List[str] = Field(default_factory=list)
+    # Merge tracking
+    merge_target: Optional[str] = None  # Filename of existing note to merge into
+    is_new: bool = True  # False if merging into existing concept
 
 
 class ZettelNote(BaseModel):
@@ -57,6 +60,9 @@ class ZettelNote(BaseModel):
     source_type: Optional[ContentType] = None
     created_at: datetime = Field(default_factory=datetime.now)
     metadata: dict = Field(default_factory=dict)
+    # Merge tracking
+    merge_target: Optional[str] = None  # Filename of existing note to merge into
+    is_new: bool = True  # False if merging into existing concept
 
     def to_markdown(self) -> str:
         """Convert to Obsidian-compatible markdown."""
@@ -72,8 +78,18 @@ class ZettelNote(BaseModel):
             lines.append(f"source: {self.source_url}")
         if self.source_type:
             lines.append(f"source_type: {self.source_type.value}")
+        # Add merge metadata
+        if self.merge_target:
+            lines.append(f"merge_into: {self.merge_target}")
+            lines.append(f"is_new: {str(self.is_new).lower()}")
         lines.append("---")
         lines.append("")
+
+        # Add merge status banner if merging
+        if not self.is_new and self.merge_target:
+            lines.append("> **⚠️ MERGE**: This content will be merged into existing note: [[{merge_target}]]".replace("{merge_target}", self.merge_target.replace('.md', '')))
+            lines.append("> Review and approve to add this content to the existing concept.")
+            lines.append("")
 
         # Title
         lines.append(f"# {self.title}")

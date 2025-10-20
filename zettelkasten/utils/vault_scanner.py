@@ -46,6 +46,46 @@ def get_existing_concept_titles(config: Config) -> List[str]:
     return [c["title"] for c in concepts]
 
 
+def find_matching_concept(concept_name: str, config: Config) -> Optional[Dict[str, str]]:
+    """
+    Find an existing concept that matches the given name.
+
+    Uses fuzzy matching to handle slight variations in naming.
+
+    Args:
+        concept_name: Name of the concept to find
+        config: Application configuration
+
+    Returns:
+        Dict with 'title' and 'filepath' if found, None otherwise
+    """
+    existing_concepts = get_existing_concepts(config)
+
+    # Normalize the search name for comparison
+    search_name = concept_name.lower().strip()
+
+    for concept in existing_concepts:
+        existing_name = concept["title"].lower().strip()
+
+        # Exact match
+        if search_name == existing_name:
+            return concept
+
+        # Very close match (handle plurals, minor differences)
+        # Remove common suffixes and check again
+        search_base = search_name.rstrip('s')
+        existing_base = existing_name.rstrip('s')
+        if search_base == existing_base:
+            return concept
+
+        # Check if one is contained in the other (with some length threshold)
+        if len(search_name) > 10 and len(existing_name) > 10:
+            if search_name in existing_name or existing_name in search_name:
+                return concept
+
+    return None
+
+
 def _extract_title(filepath: Path) -> Optional[str]:
     """
     Extract title from a markdown file's frontmatter or first heading.

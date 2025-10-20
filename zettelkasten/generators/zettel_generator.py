@@ -9,6 +9,7 @@ from zettelkasten.core.models import (
     ContentType,
 )
 from zettelkasten.core.config import Config
+from zettelkasten.utils.vault_scanner import find_matching_concept
 
 
 class ZettelGenerator:
@@ -151,6 +152,9 @@ class ZettelGenerator:
                     "source_title": source_title,
                     "related_concepts": concept.related_concepts,
                 },
+                # Add merge tracking from concept
+                merge_target=concept.merge_target,
+                is_new=concept.is_new,
             )
 
             notes.append(note)
@@ -266,6 +270,18 @@ class ZettelGenerator:
         # Create a timestamp for this batch
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
+        # Check for duplicate concepts and mark them for merging
+        for concept in concepts:
+            existing = find_matching_concept(concept.name, self.config)
+            if existing:
+                # Mark concept for merging into existing note
+                concept.is_new = False
+                concept.merge_target = Path(existing["filepath"]).name
+                print(f"  → Will merge '{concept.name}' into existing: {concept.merge_target}")
+            else:
+                concept.is_new = True
+                print(f"  → Will create new concept: '{concept.name}'")
+
         # Build filename mapping: title -> filename (without .md)
         filename_map = {}
 
@@ -275,12 +291,17 @@ class ZettelGenerator:
         source_filename = f"{timestamp}-{source_slug}"
         filename_map[content.title] = source_filename
 
-        # Concept note filenames
+        # Concept note filenames - use existing filenames if merging
         for concept in concepts:
-            concept_slug = concept.name.lower().replace(" ", "-")
-            concept_slug = "".join(c for c in concept_slug if c.isalnum() or c == "-")
-            concept_filename = f"{timestamp}-{concept_slug}"
-            filename_map[concept.name] = concept_filename
+            if not concept.is_new and concept.merge_target:
+                # Use existing filename (without .md extension)
+                filename_map[concept.name] = concept.merge_target.replace('.md', '')
+            else:
+                # Create new filename
+                concept_slug = concept.name.lower().replace(" ", "-")
+                concept_slug = "".join(c for c in concept_slug if c.isalnum() or c == "-")
+                concept_filename = f"{timestamp}-{concept_slug}"
+                filename_map[concept.name] = concept_filename
 
         # Generate source note with filename-based links
         source_note = self._generate_source_note_with_filenames(
@@ -420,6 +441,9 @@ class ZettelGenerator:
                     "source_title": source_title,
                     "related_concepts": concept.related_concepts,
                 },
+                # Add merge tracking from concept
+                merge_target=concept.merge_target,
+                is_new=concept.is_new,
             )
 
             notes.append(note)
