@@ -370,6 +370,12 @@ class ZettelGenerator:
                     lines.append(f"- **Author**: {content.metadata['author']}")
                 if content.metadata.get("site_name"):
                     lines.append(f"- **Site**: {content.metadata['site_name']}")
+                # Add link to saved article full text
+                if content.metadata.get("article_file"):
+                    from pathlib import Path
+                    article_path = Path(content.metadata["article_file"])
+                    # Use relative path from vault root
+                    lines.append(f"- **Full Text**: [View saved article](file:///{article_path.resolve()})")
 
         note_content = "\n".join(lines)
 
