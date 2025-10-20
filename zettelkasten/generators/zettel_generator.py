@@ -295,6 +295,14 @@ class ZettelGenerator:
         source_filename = f"{timestamp}-{source_slug}"
         filename_map[content.title] = source_filename
 
+        # Save article full text if this is an article
+        if content.content_type == ContentType.ARTICLE:
+            from zettelkasten.processors.article_processor import ArticleProcessor
+            article_processor = ArticleProcessor(self.config)
+            article_file = article_processor.save_full_text(source_filename, content)
+            # Store relative path from project root
+            content.metadata["article_file"] = f"sources/articles/{article_file.name}"
+
         # Concept note filenames - use existing filenames if merging
         for concept in concepts:
             if not concept.is_new and concept.merge_target:
@@ -370,12 +378,10 @@ class ZettelGenerator:
                     lines.append(f"- **Author**: {content.metadata['author']}")
                 if content.metadata.get("site_name"):
                     lines.append(f"- **Site**: {content.metadata['site_name']}")
-                # Add link to saved article full text
+                # Add link to saved article full text with relative path
                 if content.metadata.get("article_file"):
-                    from pathlib import Path
-                    article_path = Path(content.metadata["article_file"])
-                    # Use relative path from vault root
-                    lines.append(f"- **Full Text**: [View saved article](file:///{article_path.resolve()})")
+                    # Use relative path (goes up two levels from sources/ to project root, then to sources/articles/)
+                    lines.append(f"- **Full Text**: [View saved article](../../{content.metadata['article_file']})")
 
         note_content = "\n".join(lines)
 

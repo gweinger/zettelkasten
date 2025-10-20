@@ -32,16 +32,20 @@ class Config(BaseModel):
         default=Path("./vault"),
         description="Path to Obsidian vault",
     )
+    sources_path: Path = Field(
+        default=Path("./sources"),
+        description="Path for source materials (downloads, transcripts, articles)",
+    )
     downloads_path: Path = Field(
-        default=Path("./downloads"),
+        default=Path("./sources/downloads"),
         description="Path for downloaded audio/video files",
     )
     transcripts_path: Path = Field(
-        default=Path("./transcripts"),
+        default=Path("./sources/transcripts"),
         description="Path for transcript files",
     )
     articles_path: Path = Field(
-        default=Path("./articles"),
+        default=Path("./sources/articles"),
         description="Path for saved article full text",
     )
 
@@ -67,19 +71,24 @@ class Config(BaseModel):
         # Load .env from project root
         load_dotenv(project_root / ".env")
 
+        # Get base sources path
+        sources_base = Path(os.getenv("SOURCES_PATH", "./sources"))
+
         return cls(
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
             podcast_rss_feed=os.getenv("PODCAST_RSS_FEED", ""),
             vault_path=Path(os.getenv("VAULT_PATH", "./vault")),
-            downloads_path=Path(os.getenv("DOWNLOADS_PATH", "./downloads")),
-            transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", "./transcripts")),
-            articles_path=Path(os.getenv("ARTICLES_PATH", "./articles")),
+            sources_path=sources_base,
+            downloads_path=Path(os.getenv("DOWNLOADS_PATH", str(sources_base / "downloads"))),
+            transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", str(sources_base / "transcripts"))),
+            articles_path=Path(os.getenv("ARTICLES_PATH", str(sources_base / "articles"))),
         )
 
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist."""
         self.vault_path.mkdir(parents=True, exist_ok=True)
+        self.sources_path.mkdir(parents=True, exist_ok=True)
         self.downloads_path.mkdir(parents=True, exist_ok=True)
         self.transcripts_path.mkdir(parents=True, exist_ok=True)
         self.articles_path.mkdir(parents=True, exist_ok=True)

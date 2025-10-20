@@ -56,15 +56,9 @@ vault/
 # Obsidian settings (vault-specific)
 .obsidian/
 
-# Audio/Video downloads
-downloads/
+# Source materials (audio/video, transcripts, articles)
+sources/
 *.mp3
 *.mp4
 *.wav
 *.m4a
-
-# Transcripts
-transcripts/
-
-# Saved article full text
-articles/
