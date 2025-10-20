@@ -101,18 +101,39 @@ Return your analysis as a JSON object with this structure:
             json_end = content_text.find("```", json_start)
             content_text = content_text[json_start:json_end].strip()
 
+        # Fix smart quotes (curly quotes) that break JSON parsing
+        content_text = content_text.replace('"', '"').replace('"', '"')
+        content_text = content_text.replace("'", "'").replace("'", "'")
+
         try:
             data = json.loads(content_text)
         except json.JSONDecodeError as e:
             # Try to fix common JSON issues
-            # Remove trailing commas before closing brackets/braces
             import re
-            content_text = re.sub(r',(\s*[}\]])', r'\1', content_text)
+
+            # Remove trailing commas before closing brackets/braces
+            fixed_text = re.sub(r',(\s*[}\]])', r'\1', content_text)
+
+            # Try to fix unescaped quotes in strings
+            # This is a simple heuristic - not perfect but handles common cases
+
             try:
-                data = json.loads(content_text)
-            except json.JSONDecodeError:
-                # If still fails, return empty concepts
+                data = json.loads(fixed_text)
+            except json.JSONDecodeError as e2:
+                # If still fails, save the raw response for debugging and return empty concepts
                 print(f"Warning: Failed to parse concept extraction response: {e}")
+                print(f"First 500 chars of response: {content_text[:500]}")
+
+                # Try to save the problematic response to a debug file
+                try:
+                    import tempfile
+                    from pathlib import Path
+                    debug_file = Path(tempfile.gettempdir()) / "zk_concept_extraction_error.json"
+                    debug_file.write_text(content_text)
+                    print(f"Full response saved to: {debug_file}")
+                except Exception:
+                    pass
+
                 return []
 
         # Convert to Concept objects
