@@ -32,20 +32,21 @@ class Config(BaseModel):
         default=Path("./vault"),
         description="Path to Obsidian vault",
     )
-    sources_path: Path = Field(
-        default=Path("./vault/_sources"),
-        description="Path for source materials (downloads, transcripts, articles)",
+    # Note: sources/ contains both source notes AND source materials
+    audio_path: Path = Field(
+        default=Path("./vault/sources/audio"),
+        description="Path for downloaded audio files",
     )
-    downloads_path: Path = Field(
-        default=Path("./vault/_sources/downloads"),
-        description="Path for downloaded audio/video files",
+    video_path: Path = Field(
+        default=Path("./vault/sources/video"),
+        description="Path for downloaded video files",
     )
     transcripts_path: Path = Field(
-        default=Path("./vault/_sources/transcripts"),
+        default=Path("./vault/sources/transcripts"),
         description="Path for transcript files",
     )
     articles_path: Path = Field(
-        default=Path("./vault/_sources/articles"),
+        default=Path("./vault/sources/articles"),
         description="Path for saved article full text",
     )
 
@@ -74,16 +75,16 @@ class Config(BaseModel):
         # Get vault path first
         vault_path = Path(os.getenv("VAULT_PATH", "./vault"))
 
-        # Get base sources path (defaults to vault/_sources)
-        sources_base = Path(os.getenv("SOURCES_PATH", str(vault_path / "_sources")))
+        # Get base sources path (sources/ contains both notes and materials)
+        sources_base = vault_path / "sources"
 
         return cls(
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
             podcast_rss_feed=os.getenv("PODCAST_RSS_FEED", ""),
             vault_path=vault_path,
-            sources_path=sources_base,
-            downloads_path=Path(os.getenv("DOWNLOADS_PATH", str(sources_base / "downloads"))),
+            audio_path=Path(os.getenv("AUDIO_PATH", str(sources_base / "audio"))),
+            video_path=Path(os.getenv("VIDEO_PATH", str(sources_base / "video"))),
             transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", str(sources_base / "transcripts"))),
             articles_path=Path(os.getenv("ARTICLES_PATH", str(sources_base / "articles"))),
         )
@@ -91,10 +92,6 @@ class Config(BaseModel):
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist."""
         self.vault_path.mkdir(parents=True, exist_ok=True)
-        self.sources_path.mkdir(parents=True, exist_ok=True)
-        self.downloads_path.mkdir(parents=True, exist_ok=True)
-        self.transcripts_path.mkdir(parents=True, exist_ok=True)
-        self.articles_path.mkdir(parents=True, exist_ok=True)
 
         # Create Zettelkasten subdirectories
         (self.vault_path / "permanent-notes").mkdir(parents=True, exist_ok=True)
@@ -102,6 +99,12 @@ class Config(BaseModel):
         (self.vault_path / "fleeting-notes").mkdir(parents=True, exist_ok=True)
         (self.vault_path / "inbox").mkdir(parents=True, exist_ok=True)
         (self.vault_path / "staging").mkdir(parents=True, exist_ok=True)
+
+        # Create sources subdirectories (notes AND materials together)
+        self.audio_path.mkdir(parents=True, exist_ok=True)
+        self.video_path.mkdir(parents=True, exist_ok=True)
+        self.transcripts_path.mkdir(parents=True, exist_ok=True)
+        self.articles_path.mkdir(parents=True, exist_ok=True)
 
         # Create inbox subdirectories for classification
         (self.vault_path / "inbox" / "concepts").mkdir(parents=True, exist_ok=True)
