@@ -186,24 +186,33 @@ def merge_notes_intelligently(existing_content: str, new_content: str) -> str:
             lines.append(quote)
             lines.append('')
 
-    # Sources - combine and change to plural
+    # Sources - combine, deduplicate, and change to plural
     all_sources = existing['sources'] + new['sources']
     if all_sources:
         lines.append('## Sources')
         lines.append('')
         # Group sources - look for From: or URL: patterns
         current_source_group = []
+        seen_urls = set()
+
         for source in all_sources:
             # Clean up "From:" prefix if present
             source = source.replace('From: ', '')
             if source and not source.startswith('##'):
                 if source.startswith('URL:'):
                     # End of a source group
-                    current_source_group.append(source)
-                    # Write the group
-                    for line in current_source_group:
-                        lines.append(line)
-                    lines.append('')
+                    url = source.replace('URL:', '').strip()
+
+                    # Only add if we haven't seen this URL before
+                    if url not in seen_urls:
+                        seen_urls.add(url)
+                        current_source_group.append(source)
+                        # Write the group
+                        for line in current_source_group:
+                            lines.append(line)
+                        lines.append('')
+
+                    # Reset for next group
                     current_source_group = []
                 else:
                     current_source_group.append(source)
