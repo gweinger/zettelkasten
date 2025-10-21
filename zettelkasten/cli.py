@@ -225,17 +225,33 @@ def merge_notes_intelligently(existing_content: str, new_content: str) -> str:
 
     # Related Notes - merge and deduplicate
     all_related = existing['related_notes'] + new['related_notes']
-    # Deduplicate by the wiki link itself
-    seen = set()
-    unique_related = []
+    # Deduplicate by display text, keeping the most recent link (largest timestamp)
+    seen_links = {}  # dedup_key -> (note, timestamp)
+
     for note in all_related:
         # Extract the wiki link for deduplication
         link_match = re.search(r'\[\[([^\]]+)\]\]', note)
         if link_match:
             link = link_match.group(1)
-            if link not in seen:
-                seen.add(link)
-                unique_related.append(note)
+            # Check if link has display text (path|display)
+            if '|' in link:
+                # Use display text as dedup key (the part after |)
+                dedup_key = link.split('|', 1)[1].strip()
+                # Extract timestamp from path for comparison
+                path_part = link.split('|', 1)[0]
+                timestamp_match = re.search(r'(\d{14})', path_part)
+                timestamp = timestamp_match.group(1) if timestamp_match else '00000000000000'
+            else:
+                # No display text, use the whole link as key
+                dedup_key = link.strip()
+                timestamp = '00000000000000'  # No timestamp
+
+            # Keep the link with the largest (most recent) timestamp
+            if dedup_key not in seen_links or timestamp > seen_links[dedup_key][1]:
+                seen_links[dedup_key] = (note, timestamp)
+
+    # Extract just the notes, sorted by their dedup key for consistency
+    unique_related = [note for note, _ in sorted(seen_links.values(), key=lambda x: x[0])]
 
     if unique_related:
         lines.append('## Related Notes')
