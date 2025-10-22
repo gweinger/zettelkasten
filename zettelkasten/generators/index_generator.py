@@ -140,10 +140,11 @@ class IndexGenerator:
         Returns:
             Path to the generated index file
         """
-        sources_dir = self.config.get_sources_path()
+        # Get summaries directory (where source notes are stored)
+        summaries_dir = self.config.get_sources_path()
 
-        # Find all markdown files
-        note_files = list(sources_dir.glob("*.md"))
+        # Find all markdown files in summaries
+        note_files = list(summaries_dir.glob("*.md"))
 
         # Exclude the index file itself
         note_files = [f for f in note_files if f.stem.upper() != "INDEX"]
@@ -198,17 +199,17 @@ class IndexGenerator:
                 lines.append(f"*{len(notes_in_group)} {type_display.lower()}*")
                 lines.append("")
                 for note in notes_in_group:
-                    # Create relative link to the note
+                    # Create relative link to the note (in summaries/ subdirectory)
                     relative_filename = note.filepath.stem
-                    link_text = f"[[{relative_filename}|{note.title}]]"
+                    link_text = f"[[summaries/{relative_filename}|{note.title}]]"
                     if note.source_url:
                         lines.append(f"- {link_text} - [source]({note.source_url})")
                     else:
                         lines.append(f"- {link_text}")
                 lines.append("")
 
-        # Write index file
-        index_path = sources_dir / "INDEX.md"
+        # Write index file to sources root (not in summaries subdirectory)
+        index_path = self.config.get_sources_base_path() / "INDEX.md"
         index_path.write_text("\n".join(lines))
 
         return index_path
