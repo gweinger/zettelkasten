@@ -32,7 +32,12 @@ class Config(BaseModel):
         default=Path("./vault"),
         description="Path to Obsidian vault",
     )
-    # Note: sources/ contains both source notes AND source materials
+    # Note: sources/ contains source materials (articles, audio, video, transcripts)
+    # and summaries/ contains source reference notes (summaries of sources)
+    summaries_path: Path = Field(
+        default=Path("./vault/sources/summaries"),
+        description="Path for source summary/reference notes",
+    )
     audio_path: Path = Field(
         default=Path("./vault/sources/audio"),
         description="Path for downloaded audio files",
@@ -75,7 +80,7 @@ class Config(BaseModel):
         # Get vault path first
         vault_path = Path(os.getenv("VAULT_PATH", "./vault"))
 
-        # Get base sources path (sources/ contains both notes and materials)
+        # Get base sources path (sources/ contains summaries and materials)
         sources_base = vault_path / "sources"
 
         return cls(
@@ -83,6 +88,7 @@ class Config(BaseModel):
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
             podcast_rss_feed=os.getenv("PODCAST_RSS_FEED", ""),
             vault_path=vault_path,
+            summaries_path=Path(os.getenv("SUMMARIES_PATH", str(sources_base / "summaries"))),
             audio_path=Path(os.getenv("AUDIO_PATH", str(sources_base / "audio"))),
             video_path=Path(os.getenv("VIDEO_PATH", str(sources_base / "video"))),
             transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", str(sources_base / "transcripts"))),
@@ -100,7 +106,8 @@ class Config(BaseModel):
         (self.vault_path / "inbox").mkdir(parents=True, exist_ok=True)
         (self.vault_path / "staging").mkdir(parents=True, exist_ok=True)
 
-        # Create sources subdirectories (notes AND materials together)
+        # Create sources subdirectories (summaries and materials)
+        self.summaries_path.mkdir(parents=True, exist_ok=True)
         self.audio_path.mkdir(parents=True, exist_ok=True)
         self.video_path.mkdir(parents=True, exist_ok=True)
         self.transcripts_path.mkdir(parents=True, exist_ok=True)
@@ -119,7 +126,11 @@ class Config(BaseModel):
         return self.vault_path / "permanent-notes"
 
     def get_sources_path(self) -> Path:
-        """Get path to sources directory."""
+        """Get path to source summaries directory (where source notes are saved)."""
+        return self.summaries_path
+
+    def get_sources_base_path(self) -> Path:
+        """Get path to sources base directory (contains summaries and materials)."""
         return self.vault_path / "sources"
 
     def get_fleeting_notes_path(self) -> Path:
