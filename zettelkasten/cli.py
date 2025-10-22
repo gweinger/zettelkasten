@@ -341,6 +341,118 @@ def add(
 
 
 @app.command()
+def new(
+    title: str = typer.Argument(..., help="Title for the new note"),
+    note_type: str = typer.Option(
+        "concept",
+        "--type",
+        "-t",
+        help="Type of note: concept, source, or fleeting",
+    ),
+) -> None:
+    """
+    Create a new note with timestamp and proper structure.
+
+    Creates a new markdown file with:
+    - Timestamped filename
+    - YAML frontmatter with metadata
+    - Title heading
+    - Stubbed sections for content
+    - Automatic index update
+    """
+    try:
+        from datetime import datetime
+        from pathlib import Path
+
+        # Load configuration
+        config = Config.from_env()
+
+        # Create timestamp
+        timestamp = datetime.now()
+        timestamp_str = timestamp.strftime("%Y%m%d%H%M%S")
+
+        # Generate filename
+        slug = title.lower().replace(" ", "-")
+        slug = "".join(c for c in slug if c.isalnum() or c == "-")
+        filename = f"{timestamp_str}-{slug}.md"
+
+        # Determine directory based on type
+        note_type = note_type.lower()
+        if note_type in ["concept", "permanent", "permanent-note"]:
+            directory = config.get_permanent_notes_path()
+            tags = ["concept", "permanent-note"]
+        elif note_type in ["source", "literature"]:
+            directory = config.get_sources_path()
+            tags = ["source"]
+        elif note_type in ["fleeting", "fleeting-note"]:
+            directory = config.get_fleeting_notes_path()
+            tags = ["fleeting", "fleeting-note"]
+        else:
+            console.print(f"[bold red]Error:[/bold red] Invalid note type '{note_type}'")
+            console.print("Valid types: concept, source, fleeting")
+            raise typer.Exit(1)
+
+        # Ensure directory exists
+        directory.mkdir(parents=True, exist_ok=True)
+
+        filepath = directory / filename
+
+        # Check if file already exists
+        if filepath.exists():
+            console.print(f"[bold yellow]Warning:[/bold yellow] File already exists: {filepath}")
+            raise typer.Exit(1)
+
+        # Build note content
+        lines = []
+        lines.append("---")
+        lines.append(f"title: {title}")
+        lines.append(f"created: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"tags: [{', '.join(tags)}]")
+        lines.append("---")
+        lines.append("")
+        lines.append(f"# {title}")
+        lines.append("")
+        lines.append("## Description")
+        lines.append("")
+        lines.append("<!-- Add your notes here -->")
+        lines.append("")
+
+        if note_type in ["concept", "permanent", "permanent-note"]:
+            lines.append("## Key Quotes")
+            lines.append("")
+            lines.append("<!-- Add relevant quotes here -->")
+            lines.append("")
+            lines.append("## Sources")
+            lines.append("")
+            lines.append("<!-- Link to source notes here -->")
+            lines.append("")
+
+        lines.append("## Related Notes")
+        lines.append("")
+        lines.append("<!-- Link to related notes here -->")
+        lines.append("")
+
+        # Write file
+        filepath.write_text("\n".join(lines))
+
+        console.print(f"[bold green]✓[/bold green] Created note: [cyan]{filepath.relative_to(config.vault_path)}[/cyan]")
+
+        # Rebuild indices
+        console.print("\n[dim]Rebuilding indices...[/dim]")
+        try:
+            from zettelkasten.generators.index_generator import IndexGenerator
+            index_generator = IndexGenerator(config)
+            indices = index_generator.rebuild_indices()
+            console.print("[green]✓[/green] Indices updated")
+        except Exception as e:
+            console.print(f"[yellow]⚠[/yellow] Warning: Could not rebuild indices: {e}")
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def approve(
     pattern: Optional[str] = typer.Argument(
         None,
