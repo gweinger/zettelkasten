@@ -1,20 +1,21 @@
-"""Find orphan concepts that are linked but don't have files yet."""
+"""Find empty concept notes (orphans) that need to be filled out."""
 
 import re
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import List, Dict
 from dataclasses import dataclass
 
 
 @dataclass
-class OrphanConcept:
-    """Represents an orphan concept that is linked but doesn't have a file."""
-    name: str
-    backlinks: List[str]  # List of note titles that reference this orphan
+class EmptyNote:
+    """Represents an empty/stub note that needs content."""
+    title: str
+    filepath: Path
+    is_stub: bool  # True if only has frontmatter and title
 
 
 class OrphanFinder:
-    """Find orphan concepts in the vault that are referenced but don't exist."""
+    """Find empty concept notes in the vault that need content."""
 
     def __init__(self, vault_path: Path):
         """
@@ -25,72 +26,78 @@ class OrphanFinder:
         """
         self.vault_path = vault_path
         self.permanent_notes_path = vault_path / "permanent-notes"
-        self.sources_path = vault_path / "sources"
 
-    def find_all_orphans(self) -> List[OrphanConcept]:
+    def find_all_orphans(self) -> List[EmptyNote]:
         """
-        Find all orphan concepts in the permanent notes.
+        Find all empty/stub notes in the permanent notes directory.
+
+        Empty notes are those with only frontmatter and a title heading,
+        no substantive content.
 
         Returns:
-            List of OrphanConcept objects
+            List of EmptyNote objects
         """
-        # Get all existing note titles
-        existing_titles = self._get_existing_note_titles()
-
-        # Find all linked concepts and their backlinks
-        linked_concepts: Dict[str, List[str]] = {}
-
-        # Scan permanent notes for links
-        if self.permanent_notes_path.exists():
-            for note_file in self.permanent_notes_path.glob("*.md"):
-                if note_file.stem.upper() == "INDEX":
-                    continue
-
-                # Get the title of this note for backlinks
-                note_title = self._get_note_title(note_file)
-                if not note_title:
-                    continue
-
-                # Find all related notes links in this file
-                content = note_file.read_text()
-                linked_names = self._extract_related_concept_names(content)
-
-                for name in linked_names:
-                    if name not in linked_concepts:
-                        linked_concepts[name] = []
-                    # Add backlink if not already present
-                    if note_title not in linked_concepts[name]:
-                        linked_concepts[name].append(note_title)
-
-        # Find orphans: concepts that are linked but don't exist
         orphans = []
-        for concept_name, backlinks in linked_concepts.items():
-            if concept_name not in existing_titles:
-                orphans.append(OrphanConcept(name=concept_name, backlinks=backlinks))
 
-        # Sort by name for consistent output
-        orphans.sort(key=lambda x: x.name)
-        return orphans
+        if not self.permanent_notes_path.exists():
+            return orphans
 
-    def _get_existing_note_titles(self) -> Set[str]:
-        """
-        Get all existing note titles from the permanent notes directory.
+        for note_file in self.permanent_notes_path.glob("*.md"):
+            if note_file.stem.upper() == "INDEX":
+                continue
 
-        Returns:
-            Set of note titles
-        """
-        titles = set()
-
-        if self.permanent_notes_path.exists():
-            for note_file in self.permanent_notes_path.glob("*.md"):
-                if note_file.stem.upper() == "INDEX":
-                    continue
-
+            if self._is_empty_note(note_file):
                 title = self._get_note_title(note_file)
                 if title:
-                    titles.add(title)
+                    orphans.append(EmptyNote(
+                        title=title,
+                        filepath=note_file,
+                        is_stub=True
+                    ))
 
-        return titles
+        # Sort by name for consistent output
+        orphans.sort(key=lambda x: x.title)
+        return orphans
+
+    def _is_empty_note(self, filepath: Path) -> bool:
+        """
+        Check if a note is essentially empty.
+
+        A note is considered empty if it only contains:
+        - YAML frontmatter
+        - Title heading
+        - Maybe whitespace and comments
+
+        Args:
+            filepath: Path to the note file
+
+        Returns:
+            True if note is empty, False otherwise
+        """
+        try:
+            content = filepath.read_text()
+
+            # Skip frontmatter
+            frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+            if frontmatter_match:
+                content = content[frontmatter_match.end():]
+
+            # Remove title heading and surrounding whitespace
+            content = re.sub(r"^#\s+.+?\n\n", "", content, flags=re.MULTILINE)
+            content = content.strip()
+
+            # If nothing left, it's empty
+            if not content:
+                return True
+
+            # If only whitespace or HTML comments remain, it's empty
+            content_cleaned = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL)
+            content_cleaned = content_cleaned.strip()
+
+            return len(content_cleaned) == 0
+
+        except Exception:
+            return False
 
     def _get_note_title(self, filepath: Path) -> str:
         """
@@ -128,58 +135,21 @@ class OrphanFinder:
 
         return ""
 
-    def _extract_related_concept_names(self, content: str) -> List[str]:
-        """
-        Extract concept names from wikilinks in "Related Notes" section.
-
-        Args:
-            content: Note content to search
-
-        Returns:
-            List of concept names found in wikilinks
-        """
-        names = []
-
-        # Find the "Related Notes" section
-        related_section = re.search(
-            r"##\s+Related Notes\s*\n(.*?)(?=##\s+|\Z)",
-            content,
-            re.DOTALL | re.IGNORECASE
-        )
-
-        if not related_section:
-            return names
-
-        section_text = related_section.group(1)
-
-        # Extract all wikilink display names
-        # Pattern: [[path|display]] or [[path]]
-        wikilinks = re.findall(r"\[\[.*?\|(.+?)\]\]|\[\[(.+?)\]\]", section_text)
-
-        for link in wikilinks:
-            # wikilinks is a tuple of (display_name, fallback_name)
-            # Take the first non-empty one
-            name = link[0] if link[0] else link[1]
-            if name.strip():
-                names.append(name.strip())
-
-        return names
-
     def find_orphans_with_context(self) -> List[Dict]:
         """
-        Find orphans and include context about how they're referenced.
+        Find orphans and return info about them.
 
         Returns:
-            List of dicts with orphan info and backlink details
+            List of dicts with orphan info
         """
         orphans = self.find_all_orphans()
 
         result = []
         for orphan in orphans:
             result.append({
-                "name": orphan.name,
-                "backlinks": orphan.backlinks,
-                "backlink_count": len(orphan.backlinks),
+                "title": orphan.title,
+                "filepath": str(orphan.filepath),
+                "relative_path": str(orphan.filepath.relative_to(self.vault_path)),
             })
 
         return result

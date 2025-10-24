@@ -1,15 +1,13 @@
-"""Generate concept notes for orphan concepts with AI-generated summaries."""
+"""Generate content for empty concept notes with AI-generated summaries."""
 
-from datetime import datetime
-from typing import List
+import re
 from pathlib import Path
-from zettelkasten.core.models import ZettelNote
 from zettelkasten.core.config import Config
 from zettelkasten.processors.concept_extractor import ConceptExtractor
 
 
 class OrphanNoteGenerator:
-    """Generate concept notes for orphan concepts with Claude summaries."""
+    """Generate summaries for empty concept notes using Claude."""
 
     def __init__(self, config: Config):
         """
@@ -21,103 +19,75 @@ class OrphanNoteGenerator:
         self.config = config
         self.concept_extractor = ConceptExtractor(config)
 
-    def generate_orphan_note(
-        self,
-        orphan_name: str,
-        backlinks: List[str],
-        context_notes: List[str] = None,
-    ) -> ZettelNote:
+    def fill_empty_note(self, filepath: Path) -> str:
         """
-        Generate a templated note for an orphan concept.
+        Generate a summary for an empty note and return the updated content.
 
-        Uses Claude to generate a summary of the concept based on context from
-        the notes that reference it.
+        Reads the existing note file, extracts the title from frontmatter,
+        generates a summary using Claude, and returns the filled-out note content.
 
         Args:
-            orphan_name: Name of the orphan concept
-            backlinks: List of note titles that reference this orphan
-            context_notes: Optional list of full note contents for better context
+            filepath: Path to the empty note file
 
         Returns:
-            ZettelNote object ready to save
+            Updated markdown content with summary filled in
         """
-        # Generate summary from Claude using backlink context
-        summary = self._generate_summary_from_context(
-            orphan_name, backlinks, context_notes
-        )
+        # Read the existing file
+        content = filepath.read_text()
 
-        # Build the note content
-        created_at = datetime.now()
+        # Extract frontmatter
+        frontmatter_match = re.match(r"^(---\s*\n.*?\n---\s*\n)", content, re.DOTALL)
+        if not frontmatter_match:
+            raise ValueError(f"Note {filepath} does not have valid frontmatter")
+
+        frontmatter = frontmatter_match.group(1)
+        after_frontmatter = content[frontmatter_match.end():]
+
+        # Extract title from frontmatter
+        title_match = re.search(r"title:\s*(.+?)(?:\n|$)", frontmatter)
+        if not title_match:
+            raise ValueError(f"Could not extract title from {filepath}")
+
+        title = title_match.group(1).strip().strip('"\'')
+
+        # Extract title heading
+        heading_match = re.search(r"^#\s+(.+?)$", after_frontmatter, re.MULTILINE)
+        if not heading_match:
+            raise ValueError(f"Could not find title heading in {filepath}")
+
+        heading = heading_match.group(0)
+
+        # Generate summary from Claude
+        summary = self._generate_summary(title)
+
+        # Build the updated content
         lines = []
-
-        # Add the summary
+        lines.append(frontmatter.rstrip())
+        lines.append("")
+        lines.append(heading)
+        lines.append("")
         lines.append(summary)
         lines.append("")
 
-        note_content = "\n".join(lines)
+        return "\n".join(lines)
 
-        # Build links for the backlinks
-        links = []
-        for backlink in backlinks:
-            # Create safe filename slug
-            slug = backlink.lower().replace(" ", "-")
-            slug = "".join(c for c in slug if c.isalnum() or c == "-")
-            # Use the relative path pattern - ZettelNote.to_markdown() will wrap this in [[...]]
-            links.append(f"permanent-notes/{slug}|{backlink}")
-
-        # Create the note object
-        return ZettelNote(
-            title=orphan_name,
-            content=note_content,
-            tags=["concept", "permanent-note", "orphan-stub"],
-            links=links,
-            created_at=created_at,
-            metadata={
-                "related_concepts": backlinks,
-                "is_orphan_stub": True,
-            },
-        )
-
-    def _generate_summary_from_context(
-        self,
-        orphan_name: str,
-        backlinks: List[str],
-        context_notes: List[str] = None,
-    ) -> str:
+    def _generate_summary(self, concept_name: str) -> str:
         """
-        Generate a summary of the orphan concept using Claude.
-
-        Uses context from the notes that reference the concept.
+        Generate a summary of a concept using Claude.
 
         Args:
-            orphan_name: Name of the concept
-            backlinks: Titles of notes that reference this concept
-            context_notes: Optional full contents of backlinked notes
+            concept_name: Name of the concept to summarize
 
         Returns:
             Generated summary text
         """
-        # Build context from backlinks
-        backlink_text = "\n".join([f"- {link}" for link in backlinks])
+        prompt = f"""Generate a clear, concise description of the concept "{concept_name}" suitable for a personal knowledge base.
 
-        context_info = ""
-        if context_notes:
-            # Include snippets from context notes
-            context_info = "\n\nContext from referencing notes:\n"
-            for note_content in context_notes[:3]:  # Limit to first 3 for token usage
-                # Extract first paragraph
-                first_para = note_content.split("\n\n")[0]
-                if first_para:
-                    context_info += f"\n{first_para[:500]}..."
-
-        prompt = f"""Based on the following information, generate a concise description of the concept "{orphan_name}".
-
-This concept is referenced in these notes:
-{backlink_text}
-{context_info}
-
-Generate a clear, actionable description (2-3 sentences) of what this concept is, suitable for a personal knowledge base.
-Focus on how it relates to the topics in the referencing notes.
+The description should:
+- Be 2-3 sentences
+- Explain what the concept is and why it's important
+- Be written in a way that helps build understanding
+- Be actionable and practical where possible
 
 Return only the description text, no JSON or formatting."""
 

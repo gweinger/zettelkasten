@@ -1027,36 +1027,36 @@ def vault(
 def orphans(
     action: str = typer.Argument(
         "list",
-        help="Action: list, create, or create-all",
+        help="Action: list, fill, or fill-all",
     ),
     name: Optional[str] = typer.Argument(
         None,
-        help="Name of orphan concept (required for 'create' action)",
+        help="Name of empty note (required for 'fill' action)",
     ),
     batch: bool = typer.Option(
         False,
         "--batch",
         "-b",
-        help="Batch mode: create all without prompting",
+        help="Batch mode: fill all without prompting",
     ),
 ) -> None:
     """
-    Find and create stubs for orphan concepts.
+    Find and fill empty concept notes with AI-generated summaries.
 
-    Orphans are concepts that are referenced in "Related Notes" but don't
-    have their own files yet. This command helps you find and create them
-    with AI-generated summaries based on context from referencing notes.
+    Empty notes are stub files in permanent-notes/ that only have frontmatter
+    and a title but no content. This command helps you find them and fill them
+    with AI-generated summaries of the concept.
 
     Examples:
-        zk orphans list                    # Show all orphan concepts
-        zk orphans create "Concept Name"   # Create stub for specific orphan
-        zk orphans create-all --batch      # Create all orphans without prompting
+        zk orphans list               # Show all empty notes
+        zk orphans fill "Concept"     # Fill specific empty note with summary
+        zk orphans fill-all --batch   # Fill all empty notes without prompting
     """
     try:
         config = Config.from_env()
 
-        # Validate API key for create actions
-        if action in ["create", "create-all"]:
+        # Validate API key for fill actions
+        if action in ["fill", "fill-all"]:
             if not config.anthropic_api_key or config.anthropic_api_key == "your_anthropic_api_key_here":
                 console.print(
                     "[bold red]Error:[/bold red] ANTHROPIC_API_KEY not configured in .env file"
@@ -1068,115 +1068,103 @@ def orphans(
         finder = OrphanFinder(config.vault_path)
 
         if action == "list":
-            # List all orphans
+            # List all empty notes
             orphans_list = finder.find_orphans_with_context()
 
             if not orphans_list:
-                console.print("[yellow]No orphan concepts found![/yellow]")
-                console.print("\n[dim]All concepts referenced in 'Related Notes' have files.[/dim]")
+                console.print("[yellow]No empty notes found![/yellow]")
+                console.print("\n[dim]All concept notes have content.[/dim]")
                 return
 
-            console.print(f"\n[bold cyan]Found {len(orphans_list)} orphan concept(s):[/bold cyan]\n")
+            console.print(f"\n[bold cyan]Found {len(orphans_list)} empty note(s):[/bold cyan]\n")
 
             for orphan in orphans_list:
-                console.print(f"[bold]{orphan['name']}[/bold]")
-                console.print(f"  Referenced by {orphan['backlink_count']} note(s):")
-                for backlink in orphan['backlinks'][:3]:  # Show first 3
-                    console.print(f"    [dim]• {backlink}[/dim]")
-                if orphan['backlink_count'] > 3:
-                    console.print(f"    [dim]• ... and {orphan['backlink_count'] - 3} more[/dim]")
-                console.print()
+                console.print(f"[bold]{orphan['title']}[/bold]")
+                console.print(f"  [dim]{orphan['relative_path']}[/dim]")
 
-            console.print(f"[yellow]Run 'zk orphans create \"Name\"' to create a stub for a specific orphan.[/yellow]")
+            console.print(f"\n[yellow]Run 'zk orphans fill \"Name\"' to fill a specific empty note.[/yellow]")
 
-        elif action == "create":
+        elif action == "fill":
             if not name:
-                console.print("[bold red]Error:[/bold red] Concept name required for 'create' action")
-                console.print("Usage: zk orphans create \"Concept Name\"")
+                console.print("[bold red]Error:[/bold red] Concept name required for 'fill' action")
+                console.print("Usage: zk orphans fill \"Concept Name\"")
                 raise typer.Exit(1)
 
-            # Find the specific orphan
+            # Find the specific empty note
             orphans_list = finder.find_all_orphans()
             orphan = None
             for o in orphans_list:
-                if o.name.lower() == name.lower():
+                if o.title.lower() == name.lower():
                     orphan = o
                     break
 
             if not orphan:
-                console.print(f"[bold red]Error:[/bold red] Orphan concept '{name}' not found")
-                console.print("\nRun 'zk orphans list' to see all orphan concepts")
+                console.print(f"[bold red]Error:[/bold red] Empty note '{name}' not found")
+                console.print("\nRun 'zk orphans list' to see all empty notes")
                 raise typer.Exit(1)
 
-            console.print(f"\n[bold cyan]Creating stub for:[/bold cyan] {orphan.name}")
-            console.print(f"[dim]Referenced by:[/dim]")
-            for backlink in orphan.backlinks:
-                console.print(f"  [dim]• {backlink}[/dim]")
+            console.print(f"\n[bold cyan]Filling note:[/bold cyan] {orphan.title}")
+            console.print(f"[dim]{orphan.filepath.relative_to(config.vault_path)}[/dim]")
             console.print()
 
             # Generate summary from Claude
             console.print("[dim]Generating summary from Claude...[/dim]")
             generator = OrphanNoteGenerator(config)
-            note = generator.generate_orphan_note(orphan.name, orphan.backlinks)
+            updated_content = generator.fill_empty_note(orphan.filepath)
 
-            # Save the note
-            from zettelkasten.generators.zettel_generator import ZettelGenerator
-            zettel_gen = ZettelGenerator(config)
-            filepath = zettel_gen.save_note(note)
+            # Write the updated content
+            orphan.filepath.write_text(updated_content)
 
-            console.print(f"\n[bold green]✓ Created orphan stub:[/bold green]")
-            console.print(f"  [cyan]{filepath.relative_to(config.vault_path)}[/cyan]")
-            console.print(f"\n[dim]File location: {filepath}[/dim]")
-            console.print("[yellow]Review and edit the note to add more details.[/yellow]")
+            console.print(f"\n[bold green]✓ Filled empty note:[/bold green]")
+            console.print(f"  [cyan]{orphan.filepath.relative_to(config.vault_path)}[/cyan]")
+            console.print("[yellow]Review and edit the note to add more details if needed.[/yellow]")
 
-        elif action == "create-all":
-            # Find all orphans
+        elif action == "fill-all":
+            # Find all empty notes
             orphans_list = finder.find_all_orphans()
 
             if not orphans_list:
-                console.print("[yellow]No orphan concepts found![/yellow]")
+                console.print("[yellow]No empty notes found![/yellow]")
                 return
 
-            console.print(f"\n[bold cyan]Found {len(orphans_list)} orphan concept(s)[/bold cyan]\n")
+            console.print(f"\n[bold cyan]Found {len(orphans_list)} empty note(s)[/bold cyan]\n")
 
             if not batch:
                 # Show list and ask for confirmation
                 for orphan in orphans_list:
-                    console.print(f"  [cyan]→[/cyan] {orphan.name}")
+                    console.print(f"  [cyan]→[/cyan] {orphan.title}")
 
-                confirm = typer.confirm("\nCreate stubs for all orphan concepts?")
+                confirm = typer.confirm("\nFill all empty notes?")
                 if not confirm:
                     console.print("[yellow]Cancelled.[/yellow]")
                     return
 
-            # Generate and save all notes
+            # Generate and fill all notes
             generator = OrphanNoteGenerator(config)
-            from zettelkasten.generators.zettel_generator import ZettelGenerator
-            zettel_gen = ZettelGenerator(config)
 
-            created_count = 0
+            filled_count = 0
             failed_count = 0
 
             for orphan in orphans_list:
                 try:
-                    console.print(f"\n[dim]Creating: {orphan.name}...[/dim]")
-                    note = generator.generate_orphan_note(orphan.name, orphan.backlinks)
-                    filepath = zettel_gen.save_note(note)
-                    console.print(f"[green]✓[/green] {filepath.relative_to(config.vault_path)}")
-                    created_count += 1
+                    console.print(f"\n[dim]Filling: {orphan.title}...[/dim]")
+                    updated_content = generator.fill_empty_note(orphan.filepath)
+                    orphan.filepath.write_text(updated_content)
+                    console.print(f"[green]✓[/green] {orphan.filepath.relative_to(config.vault_path)}")
+                    filled_count += 1
                 except Exception as e:
-                    console.print(f"[red]✗[/red] Failed to create '{orphan.name}': {e}")
+                    console.print(f"[red]✗[/red] Failed to fill '{orphan.title}': {e}")
                     failed_count += 1
 
             # Summary
             console.print(f"\n[bold green]Complete![/bold green]")
-            console.print(f"Created: [green]{created_count}[/green] note(s)")
+            console.print(f"Filled: [green]{filled_count}[/green] note(s)")
             if failed_count > 0:
                 console.print(f"Failed: [red]{failed_count}[/red] note(s)")
 
         else:
             console.print(f"[bold red]Error:[/bold red] Unknown action '{action}'")
-            console.print("\nSupported actions: list, create, create-all")
+            console.print("\nSupported actions: list, fill, fill-all")
             raise typer.Exit(1)
 
     except Exception as e:
