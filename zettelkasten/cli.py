@@ -1107,16 +1107,24 @@ def orphans(
             console.print(f"[dim]{orphan.filepath.relative_to(config.vault_path)}[/dim]")
             console.print()
 
+            # Find backlinks to this concept from other notes
+            console.print("[dim]Finding backlinks from other notes...[/dim]")
+            backlink_sources = finder.find_backlinks(orphan.title)
+            if backlink_sources:
+                console.print(f"[dim]Found {len(backlink_sources)} note(s) that reference this concept[/dim]")
+
             # Generate summary from Claude
             console.print("[dim]Generating summary from Claude...[/dim]")
             generator = OrphanNoteGenerator(config)
-            updated_content = generator.fill_empty_note(orphan.filepath)
+            updated_content = generator.fill_empty_note(orphan.filepath, backlink_sources)
 
             # Write the updated content
             orphan.filepath.write_text(updated_content)
 
             console.print(f"\n[bold green]✓ Filled empty note:[/bold green]")
             console.print(f"  [cyan]{orphan.filepath.relative_to(config.vault_path)}[/cyan]")
+            if backlink_sources:
+                console.print(f"[dim]Added {len(backlink_sources)} backlink(s) to Related Notes[/dim]")
             console.print("[yellow]Review and edit the note to add more details if needed.[/yellow]")
 
         elif action == "fill-all":
@@ -1148,7 +1156,13 @@ def orphans(
             for orphan in orphans_list:
                 try:
                     console.print(f"\n[dim]Filling: {orphan.title}...[/dim]")
-                    updated_content = generator.fill_empty_note(orphan.filepath)
+
+                    # Find backlinks to this concept from other notes
+                    backlink_sources = finder.find_backlinks(orphan.title)
+                    if backlink_sources:
+                        console.print(f"[dim]  Found {len(backlink_sources)} backlink(s)[/dim]")
+
+                    updated_content = generator.fill_empty_note(orphan.filepath, backlink_sources)
                     orphan.filepath.write_text(updated_content)
                     console.print(f"[green]✓[/green] {orphan.filepath.relative_to(config.vault_path)}")
                     filled_count += 1

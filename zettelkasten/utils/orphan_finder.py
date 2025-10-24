@@ -174,3 +174,64 @@ class OrphanFinder:
             })
 
         return result
+
+    def find_backlinks(self, concept_name: str) -> List[str]:
+        """
+        Find all source notes that reference a concept in their Related Notes section.
+
+        Scans all permanent notes' Related Notes sections and identifies which notes
+        reference the given concept name. Returns the titles of those source notes
+        (which should be used as display names in backlinks).
+
+        Args:
+            concept_name: Name of the concept to find backlinks for
+
+        Returns:
+            List of source note titles that reference this concept
+        """
+        source_titles = []
+        seen_sources = set()  # Track unique sources to avoid duplicates
+
+        if not self.permanent_notes_path.exists():
+            return source_titles
+
+        for note_file in self.permanent_notes_path.glob("*.md"):
+            if note_file.stem.upper() == "INDEX":
+                continue
+
+            try:
+                content = note_file.read_text()
+
+                # Find the "Related Notes" section
+                related_section = re.search(
+                    r"##\s+Related Notes\s*\n(.*?)(?=##\s+|\Z)",
+                    content,
+                    re.DOTALL | re.IGNORECASE
+                )
+
+                if not related_section:
+                    continue
+
+                section_text = related_section.group(1)
+
+                # Extract all wikilinks with their display names
+                # Pattern: [[path|display]] or [[display]]
+                wikilink_pattern = r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"
+                for match in re.finditer(wikilink_pattern, section_text):
+                    path = match.group(1).strip()
+                    display_name = match.group(2).strip() if match.group(2) else path
+
+                    # Check if this wikilink references our concept
+                    # Match by display name (case-insensitive for robustness)
+                    if display_name.lower() == concept_name.lower():
+                        # Get the title of the SOURCE note (the one we're scanning)
+                        source_title = self._get_note_title(note_file)
+                        if source_title and source_title not in seen_sources:
+                            seen_sources.add(source_title)
+                            source_titles.append(source_title)
+
+            except Exception:
+                # Skip files that cause errors
+                continue
+
+        return source_titles
