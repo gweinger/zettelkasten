@@ -175,25 +175,25 @@ class OrphanFinder:
 
         return result
 
-    def find_backlinks(self, concept_name: str) -> List[str]:
+    def find_backlinks(self, concept_name: str) -> List[Dict]:
         """
         Find all source notes that reference a concept in their Related Notes section.
 
         Scans all permanent notes' Related Notes sections and identifies which notes
-        reference the given concept name. Returns the titles of those source notes
-        (which should be used as display names in backlinks).
+        reference the given concept name. Returns both the title (for display) and
+        relative file path for each source note.
 
         Args:
             concept_name: Name of the concept to find backlinks for
 
         Returns:
-            List of source note titles that reference this concept
+            List of dicts with 'title' and 'relative_path' for each source note
         """
-        source_titles = []
+        backlinks = []
         seen_sources = set()  # Track unique sources to avoid duplicates
 
         if not self.permanent_notes_path.exists():
-            return source_titles
+            return backlinks
 
         for note_file in self.permanent_notes_path.glob("*.md"):
             if note_file.stem.upper() == "INDEX":
@@ -226,12 +226,19 @@ class OrphanFinder:
                     if display_name.lower() == concept_name.lower():
                         # Get the title of the SOURCE note (the one we're scanning)
                         source_title = self._get_note_title(note_file)
-                        if source_title and source_title not in seen_sources:
-                            seen_sources.add(source_title)
-                            source_titles.append(source_title)
+                        source_key = source_title.lower() if source_title else ""
+
+                        if source_title and source_key not in seen_sources:
+                            seen_sources.add(source_key)
+                            # Calculate relative path from vault root
+                            relative_path = str(note_file.relative_to(self.vault_path))
+                            backlinks.append({
+                                "title": source_title,
+                                "relative_path": relative_path
+                            })
 
             except Exception:
                 # Skip files that cause errors
                 continue
 
-        return source_titles
+        return backlinks

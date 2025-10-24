@@ -20,7 +20,7 @@ class OrphanNoteGenerator:
         self.config = config
         self.concept_extractor = ConceptExtractor(config)
 
-    def fill_empty_note(self, filepath: Path, backlink_sources: List[str] = None) -> str:
+    def fill_empty_note(self, filepath: Path, backlink_sources: List[Dict] = None) -> str:
         """
         Generate a complete concept note for an empty file.
 
@@ -38,7 +38,8 @@ class OrphanNoteGenerator:
 
         Args:
             filepath: Path to the empty note file being filled
-            backlink_sources: Optional list of note titles that reference this concept
+            backlink_sources: Optional list of dicts with 'title' and 'relative_path'
+                            for each source note that references this concept
 
         Returns:
             Updated markdown content with full concept note structure
@@ -119,7 +120,7 @@ class OrphanNoteGenerator:
 
         return "\n".join(lines)
 
-    def _generate_complete_note(self, concept_name: str, backlink_sources: List[str] = None, current_filepath: str = None) -> List[str]:
+    def _generate_complete_note(self, concept_name: str, backlink_sources: List[Dict] = None, current_filepath: str = None) -> List[str]:
         """
         Generate a complete concept note with all sections.
 
@@ -130,7 +131,8 @@ class OrphanNoteGenerator:
 
         Args:
             concept_name: Name of the concept
-            backlink_sources: List of note titles that reference this concept
+            backlink_sources: List of dicts with 'title' and 'relative_path' for
+                            notes that reference this concept
             current_filepath: Relative path to this file (e.g., permanent-notes/20251024145426-concept)
 
         Returns:
@@ -154,11 +156,13 @@ class OrphanNoteGenerator:
         lines.append("## Related Notes")
         lines.append("")
 
-        if backlink_sources and current_filepath:
+        if backlink_sources:
             # Add backlinks to notes that reference this concept
-            # Each backlink points to this file with the source note title as display name
-            for source_title in backlink_sources:
-                lines.append(f"- [[{current_filepath}|{source_title}]]")
+            # Each backlink points to the source note file with the source note title as display name
+            for backlink in backlink_sources:
+                source_path = backlink["relative_path"]
+                source_title = backlink["title"]
+                lines.append(f"- [[{source_path}|{source_title}]]")
             lines.append("")
 
         lines.append("")
