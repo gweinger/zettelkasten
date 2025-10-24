@@ -351,28 +351,32 @@ def new(
         "-t",
         help="Type of note: concept, source, or fleeting",
     ),
-    fill: bool = typer.Option(
+    no_fill: bool = typer.Option(
         False,
-        "--fill",
-        "-f",
-        help="Auto-fill concept notes with Claude-generated description and find backlinks",
+        "--no-fill",
+        help="Create empty template without auto-filling description and backlinks",
     ),
 ) -> None:
     """
     Create a new note with timestamp and proper structure.
 
-    Creates a new markdown file with:
+    By default, creates notes with:
     - Timestamped filename
     - YAML frontmatter with metadata
     - Title heading
-    - Sections for content (with auto-fill available for concepts)
+    - Auto-generated description (for concept notes)
+    - Auto-discovered backlinks (for concept notes)
     - Automatic index update
 
-    For concept notes with --fill flag:
+    For concept notes:
     - Generates description using Claude
     - Finds and adds existing backlinks from other notes
     - Requires ANTHROPIC_API_KEY for description generation
+
+    Use --no-fill flag to create empty templates instead.
     """
+    # Set fill to opposite of no_fill
+    fill = not no_fill
     try:
         from datetime import datetime
         from pathlib import Path
