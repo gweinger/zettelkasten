@@ -23,8 +23,11 @@ class OrphanNoteGenerator:
         """
         Generate a summary for an empty note and return the updated content.
 
-        Reads the existing note file, extracts the title from frontmatter,
-        generates a summary using Claude, and returns the filled-out note content.
+        Reads the existing note file, extracts the title, generates a summary
+        using Claude, and returns the filled-out note content.
+
+        For completely empty files, creates full frontmatter and structure.
+        For files with existing structure, preserves it.
 
         Args:
             filepath: Path to the empty note file
@@ -35,13 +38,46 @@ class OrphanNoteGenerator:
         # Read the existing file
         content = filepath.read_text()
 
+        # Check if file is completely empty
+        if not content or not content.strip():
+            # Extract title from filename
+            filename = filepath.stem
+            # Remove timestamp prefix (format: 20251024145426-title)
+            parts = filename.split("-", 1)
+            if len(parts) > 1:
+                title = parts[1].replace("-", " ").title()
+            else:
+                title = filename
+
+            # Generate summary from Claude
+            summary = self._generate_summary(title)
+
+            # Create full note structure
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            lines = []
+            lines.append("---")
+            lines.append(f"title: {title}")
+            lines.append(f"created: {timestamp}")
+            lines.append("tags: [concept, permanent-note]")
+            lines.append("---")
+            lines.append("")
+            lines.append(f"# {title}")
+            lines.append("")
+            lines.append(summary)
+            lines.append("")
+
+            return "\n".join(lines)
+
+        # File has content - extract existing structure
         # Extract frontmatter
         frontmatter_match = re.match(r"^(---\s*\n.*?\n---\s*\n)", content, re.DOTALL)
-        if not frontmatter_match:
+        if frontmatter_match:
+            frontmatter = frontmatter_match.group(1)
+            after_frontmatter = content[frontmatter_match.end():]
+        else:
             raise ValueError(f"Note {filepath} does not have valid frontmatter")
-
-        frontmatter = frontmatter_match.group(1)
-        after_frontmatter = content[frontmatter_match.end():]
 
         # Extract title from frontmatter
         title_match = re.search(r"title:\s*(.+?)(?:\n|$)", frontmatter)
@@ -50,12 +86,12 @@ class OrphanNoteGenerator:
 
         title = title_match.group(1).strip().strip('"\'')
 
-        # Extract title heading
+        # Extract title heading if present
         heading_match = re.search(r"^#\s+(.+?)$", after_frontmatter, re.MULTILINE)
-        if not heading_match:
-            raise ValueError(f"Could not find title heading in {filepath}")
-
-        heading = heading_match.group(0)
+        if heading_match:
+            heading = heading_match.group(0)
+        else:
+            heading = f"# {title}"
 
         # Generate summary from Claude
         summary = self._generate_summary(title)

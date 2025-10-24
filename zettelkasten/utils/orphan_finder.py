@@ -63,10 +63,11 @@ class OrphanFinder:
         """
         Check if a note is essentially empty.
 
-        A note is considered empty if it only contains:
-        - YAML frontmatter
-        - Title heading
-        - Maybe whitespace and comments
+        A note is considered empty if it:
+        - Is completely empty (0 bytes)
+        - Only contains YAML frontmatter
+        - Only contains frontmatter + title heading
+        - Only contains frontmatter + title + whitespace/comments
 
         Args:
             filepath: Path to the note file
@@ -77,10 +78,18 @@ class OrphanFinder:
         try:
             content = filepath.read_text()
 
+            # Completely empty file
+            if not content or not content.strip():
+                return True
+
             # Skip frontmatter
             frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
             if frontmatter_match:
                 content = content[frontmatter_match.end():]
+            else:
+                # No frontmatter found - if file starts with non-frontmatter content,
+                # it's not empty in the way we're looking for
+                return False
 
             # Remove title heading and surrounding whitespace
             content = re.sub(r"^#\s+.+?\n\n", "", content, flags=re.MULTILINE)
@@ -103,7 +112,8 @@ class OrphanFinder:
         """
         Extract the title from a note file.
 
-        Looks in YAML frontmatter first, then falls back to first heading.
+        For completely empty files, use the filename as the title.
+        Otherwise, looks in YAML frontmatter first, then falls back to first heading.
 
         Args:
             filepath: Path to the note file
@@ -113,6 +123,17 @@ class OrphanFinder:
         """
         try:
             content = filepath.read_text()
+
+            # Completely empty file - use filename as title
+            if not content or not content.strip():
+                # Extract title from filename (remove timestamp prefix and .md)
+                filename = filepath.stem
+                # Remove timestamp prefix (format: 20251024145426-title)
+                parts = filename.split("-", 1)
+                if len(parts) > 1:
+                    title = parts[1].replace("-", " ").title()
+                    return title
+                return filename
 
             # Try YAML frontmatter first
             frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
