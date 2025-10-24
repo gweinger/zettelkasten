@@ -9,18 +9,30 @@ This tool processes content from various sources and generates interconnected ma
 ## Features
 
 ### 1. Seed Workflow
-Bootstrap your Zettelkasten a Podcast:
-- Downloads audio files from RSS feed
+Bootstrap your Zettelkasten from a Podcast RSS Feed:
+- Parses RSS feed for podcast episodes
+- Downloads audio files using requests/yt-dlp
 - Transcribes using **local Whisper** (runs on your machine, no API costs)
-- Extracts key concepts using Claude 3.5 Sonnet
-- Generates Zettelkasten files with bidirectional links
+- Extracts key concepts and references using Claude 3.5 Sonnet
+- Generates Zettelkasten markdown files with bidirectional wikilinks
+- Saves to vault directory ready for Obsidian
 
 ### 2. Update Workflow
 Add new content to your existing Zettelkasten:
-- YouTube videos (downloads audio, transcribes locally)
-- Podcast episodes (Apple Podcasts, Spotify)
-- Blog articles (extracts text)
-- Processes and integrates with existing notes
+- **YouTube videos**: Downloads audio and transcribes locally
+- **Podcast episodes**: Handles various podcast sources
+- **Blog articles**: Extracts and processes text content
+- Identifies content type automatically from URL
+- Extracts concepts and integrates with existing notes
+- Generates interconnected markdown with bidirectional links
+
+### 3. Additional Features
+- **Quick note creation**: `zk new` command for creating notes quickly
+- **Configuration management**: Easy setup with environment variables
+- **Obsidian integration**: Generated files work seamlessly with Obsidian vaults
+- **YAML frontmatter**: Automatic metadata for date, source, and tags
+- **Bidirectional linking**: Wikilink-style connections between related concepts
+- **Local processing**: No API costs for transcription (Whisper runs locally)
 
 ## Setup
 
@@ -40,6 +52,11 @@ cp .env.example .env
 
 ## Usage
 
+### Initialize a new vault
+```bash
+zk init
+```
+
 ### Seed from podcast RSS feed
 ```bash
 zk seed
@@ -48,6 +65,16 @@ zk seed
 ### Add content from URL
 ```bash
 zk add <url>
+```
+
+### Create a new note
+```bash
+zk new
+```
+
+### Show configuration
+```bash
+zk config --show
 ```
 
 ## Development
