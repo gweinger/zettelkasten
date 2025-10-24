@@ -115,8 +115,14 @@ IMPORTANT: Return ONLY valid JSON. Do NOT use smart quotes or curly quotes. Esca
             # Try to fix common JSON issues
             import re
 
+            fixed_text = content_text
+
+            # Fix escaped single quotes (Claude sometimes returns \' which isn't valid JSON)
+            # Replace \' with just ' since single quotes don't need escaping in JSON strings
+            fixed_text = fixed_text.replace("\\'", "'")
+
             # Remove trailing commas before closing brackets/braces
-            fixed_text = re.sub(r',(\s*[}\]])', r'\1', content_text)
+            fixed_text = re.sub(r',(\s*[}\]])', r'\1', fixed_text)
 
             # Try to manually fix unescaped quotes by using a simple heuristic:
             # Replace quotes inside string values (between ": " and ",)
