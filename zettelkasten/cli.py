@@ -11,6 +11,8 @@ from typing import Optional
 from zettelkasten.core.config import Config
 from zettelkasten.core.workflow import AddWorkflow, ImportWorkflow
 from zettelkasten.generators.index_generator import IndexGenerator
+from zettelkasten.generators.orphan_generator import OrphanNoteGenerator
+from zettelkasten.utils.orphan_finder import OrphanFinder
 
 app = typer.Typer(help="Zettelkasten CLI - Generate and manage your knowledge base")
 console = Console()
@@ -1016,6 +1018,167 @@ def vault(
     except subprocess.CalledProcessError as e:
         console.print(f"[bold red]Git error:[/bold red] {e}")
         raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def orphans(
+    action: str = typer.Argument(
+        "list",
+        help="Action: list, create, or create-all",
+    ),
+    name: Optional[str] = typer.Argument(
+        None,
+        help="Name of orphan concept (required for 'create' action)",
+    ),
+    batch: bool = typer.Option(
+        False,
+        "--batch",
+        "-b",
+        help="Batch mode: create all without prompting",
+    ),
+) -> None:
+    """
+    Find and create stubs for orphan concepts.
+
+    Orphans are concepts that are referenced in "Related Notes" but don't
+    have their own files yet. This command helps you find and create them
+    with AI-generated summaries based on context from referencing notes.
+
+    Examples:
+        zk orphans list                    # Show all orphan concepts
+        zk orphans create "Concept Name"   # Create stub for specific orphan
+        zk orphans create-all --batch      # Create all orphans without prompting
+    """
+    try:
+        config = Config.from_env()
+
+        # Validate API key for create actions
+        if action in ["create", "create-all"]:
+            if not config.anthropic_api_key or config.anthropic_api_key == "your_anthropic_api_key_here":
+                console.print(
+                    "[bold red]Error:[/bold red] ANTHROPIC_API_KEY not configured in .env file"
+                )
+                console.print("Please add your Anthropic API key to the .env file")
+                raise typer.Exit(1)
+
+        # Initialize orphan finder
+        finder = OrphanFinder(config.vault_path)
+
+        if action == "list":
+            # List all orphans
+            orphans_list = finder.find_orphans_with_context()
+
+            if not orphans_list:
+                console.print("[yellow]No orphan concepts found![/yellow]")
+                console.print("\n[dim]All concepts referenced in 'Related Notes' have files.[/dim]")
+                return
+
+            console.print(f"\n[bold cyan]Found {len(orphans_list)} orphan concept(s):[/bold cyan]\n")
+
+            for orphan in orphans_list:
+                console.print(f"[bold]{orphan['name']}[/bold]")
+                console.print(f"  Referenced by {orphan['backlink_count']} note(s):")
+                for backlink in orphan['backlinks'][:3]:  # Show first 3
+                    console.print(f"    [dim]• {backlink}[/dim]")
+                if orphan['backlink_count'] > 3:
+                    console.print(f"    [dim]• ... and {orphan['backlink_count'] - 3} more[/dim]")
+                console.print()
+
+            console.print(f"[yellow]Run 'zk orphans create \"Name\"' to create a stub for a specific orphan.[/yellow]")
+
+        elif action == "create":
+            if not name:
+                console.print("[bold red]Error:[/bold red] Concept name required for 'create' action")
+                console.print("Usage: zk orphans create \"Concept Name\"")
+                raise typer.Exit(1)
+
+            # Find the specific orphan
+            orphans_list = finder.find_all_orphans()
+            orphan = None
+            for o in orphans_list:
+                if o.name.lower() == name.lower():
+                    orphan = o
+                    break
+
+            if not orphan:
+                console.print(f"[bold red]Error:[/bold red] Orphan concept '{name}' not found")
+                console.print("\nRun 'zk orphans list' to see all orphan concepts")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Creating stub for:[/bold cyan] {orphan.name}")
+            console.print(f"[dim]Referenced by:[/dim]")
+            for backlink in orphan.backlinks:
+                console.print(f"  [dim]• {backlink}[/dim]")
+            console.print()
+
+            # Generate summary from Claude
+            console.print("[dim]Generating summary from Claude...[/dim]")
+            generator = OrphanNoteGenerator(config)
+            note = generator.generate_orphan_note(orphan.name, orphan.backlinks)
+
+            # Save the note
+            from zettelkasten.generators.zettel_generator import ZettelGenerator
+            zettel_gen = ZettelGenerator(config)
+            filepath = zettel_gen.save_note(note)
+
+            console.print(f"\n[bold green]✓ Created orphan stub:[/bold green]")
+            console.print(f"  [cyan]{filepath.relative_to(config.vault_path)}[/cyan]")
+            console.print(f"\n[dim]File location: {filepath}[/dim]")
+            console.print("[yellow]Review and edit the note to add more details.[/yellow]")
+
+        elif action == "create-all":
+            # Find all orphans
+            orphans_list = finder.find_all_orphans()
+
+            if not orphans_list:
+                console.print("[yellow]No orphan concepts found![/yellow]")
+                return
+
+            console.print(f"\n[bold cyan]Found {len(orphans_list)} orphan concept(s)[/bold cyan]\n")
+
+            if not batch:
+                # Show list and ask for confirmation
+                for orphan in orphans_list:
+                    console.print(f"  [cyan]→[/cyan] {orphan.name}")
+
+                confirm = typer.confirm("\nCreate stubs for all orphan concepts?")
+                if not confirm:
+                    console.print("[yellow]Cancelled.[/yellow]")
+                    return
+
+            # Generate and save all notes
+            generator = OrphanNoteGenerator(config)
+            from zettelkasten.generators.zettel_generator import ZettelGenerator
+            zettel_gen = ZettelGenerator(config)
+
+            created_count = 0
+            failed_count = 0
+
+            for orphan in orphans_list:
+                try:
+                    console.print(f"\n[dim]Creating: {orphan.name}...[/dim]")
+                    note = generator.generate_orphan_note(orphan.name, orphan.backlinks)
+                    filepath = zettel_gen.save_note(note)
+                    console.print(f"[green]✓[/green] {filepath.relative_to(config.vault_path)}")
+                    created_count += 1
+                except Exception as e:
+                    console.print(f"[red]✗[/red] Failed to create '{orphan.name}': {e}")
+                    failed_count += 1
+
+            # Summary
+            console.print(f"\n[bold green]Complete![/bold green]")
+            console.print(f"Created: [green]{created_count}[/green] note(s)")
+            if failed_count > 0:
+                console.print(f"Failed: [red]{failed_count}[/red] note(s)")
+
+        else:
+            console.print(f"[bold red]Error:[/bold red] Unknown action '{action}'")
+            console.print("\nSupported actions: list, create, create-all")
+            raise typer.Exit(1)
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
