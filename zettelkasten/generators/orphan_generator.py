@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import List, Dict
 from zettelkasten.core.config import Config
-from zettelkasten.processors.concept_extractor import ConceptExtractor
+from zettelkasten.generators.note_content_generator import NoteContentGenerator
 
 
 class OrphanNoteGenerator:
@@ -18,7 +18,7 @@ class OrphanNoteGenerator:
             config: Application configuration
         """
         self.config = config
-        self.concept_extractor = ConceptExtractor(config)
+        self.content_generator = NoteContentGenerator(config)
 
     def fill_empty_note(self, filepath: Path, backlink_sources: List[Dict] = None) -> str:
         """
@@ -62,8 +62,10 @@ class OrphanNoteGenerator:
             else:
                 title = filename
 
-            # Generate complete note content
-            note_content = self._generate_complete_note(title, backlink_sources, relative_filepath)
+            # Generate complete note content with auto-fill
+            note_content = self.content_generator.generate_concept_note_content(
+                title, backlink_sources, auto_fill=True
+            )
 
             # Create full note structure
             from datetime import datetime
@@ -106,8 +108,10 @@ class OrphanNoteGenerator:
         else:
             heading = f"# {title}"
 
-        # Generate complete note content
-        note_content = self._generate_complete_note(title, backlink_sources, relative_filepath)
+        # Generate complete note content with auto-fill
+        note_content = self.content_generator.generate_concept_note_content(
+            title, backlink_sources, auto_fill=True
+        )
 
         # Build the updated content
         lines = []
@@ -120,80 +124,3 @@ class OrphanNoteGenerator:
 
         return "\n".join(lines)
 
-    def _generate_complete_note(self, concept_name: str, backlink_sources: List[Dict] = None, current_filepath: str = None) -> List[str]:
-        """
-        Generate a complete concept note with all sections.
-
-        Creates a list of lines containing:
-        - Description/summary
-        - Key Quotes section (empty, for manual filling)
-        - Related Notes section (with backlinks to this file if available)
-
-        Args:
-            concept_name: Name of the concept
-            backlink_sources: List of dicts with 'title' and 'relative_path' for
-                            notes that reference this concept
-            current_filepath: Relative path to this file (e.g., permanent-notes/20251024145426-concept)
-
-        Returns:
-            List of markdown lines for the note content
-        """
-        # Generate description
-        description = self._generate_summary(concept_name)
-
-        lines = []
-
-        # Add description
-        lines.append(description)
-        lines.append("")
-
-        # Add Key Quotes section (empty template)
-        lines.append("## Key Quotes")
-        lines.append("")
-        lines.append("")
-
-        # Add Related Notes section with backlinks if available
-        lines.append("## Related Notes")
-        lines.append("")
-
-        if backlink_sources:
-            # Add backlinks to notes that reference this concept
-            # Each backlink points to the source note file with the source note title as display name
-            for backlink in backlink_sources:
-                source_path = backlink["relative_path"]
-                source_title = backlink["title"]
-                lines.append(f"- [[{source_path}|{source_title}]]")
-            lines.append("")
-
-        lines.append("")
-
-        return lines
-
-    def _generate_summary(self, concept_name: str) -> str:
-        """
-        Generate a summary of a concept using Claude.
-
-        Args:
-            concept_name: Name of the concept to summarize
-
-        Returns:
-            Generated summary text
-        """
-        prompt = f"""Generate a clear, concise description of the concept "{concept_name}" suitable for a personal knowledge base.
-
-The description should:
-- Be 2-3 sentences
-- Explain what the concept is and why it's important
-- Be written in a way that helps build understanding
-- Be actionable and practical where possible
-
-Return only the description text, no JSON or formatting."""
-
-        response = self.concept_extractor.client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=512,
-            temperature=0.5,
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        return response.content[0].text.strip()

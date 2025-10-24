@@ -351,6 +351,12 @@ def new(
         "-t",
         help="Type of note: concept, source, or fleeting",
     ),
+    fill: bool = typer.Option(
+        False,
+        "--fill",
+        "-f",
+        help="Auto-fill concept notes with Claude-generated description and find backlinks",
+    ),
 ) -> None:
     """
     Create a new note with timestamp and proper structure.
@@ -359,8 +365,13 @@ def new(
     - Timestamped filename
     - YAML frontmatter with metadata
     - Title heading
-    - Stubbed sections for content
+    - Sections for content (with auto-fill available for concepts)
     - Automatic index update
+
+    For concept notes with --fill flag:
+    - Generates description using Claude
+    - Finds and adds existing backlinks from other notes
+    - Requires ANTHROPIC_API_KEY for description generation
     """
     try:
         from datetime import datetime
@@ -414,25 +425,48 @@ def new(
         lines.append("")
         lines.append(f"# {title}")
         lines.append("")
-        lines.append("## Description")
-        lines.append("")
-        lines.append("<!-- Add your notes here -->")
-        lines.append("")
 
+        # Generate content based on note type and fill flag
         if note_type in ["concept", "permanent", "permanent-note"]:
-            lines.append("## Key Quotes")
-            lines.append("")
-            lines.append("<!-- Add relevant quotes here -->")
-            lines.append("")
-            lines.append("## Sources")
-            lines.append("")
-            lines.append("<!-- Link to source notes here -->")
-            lines.append("")
+            # For concept notes, use NoteContentGenerator for consistency
+            from zettelkasten.generators.note_content_generator import NoteContentGenerator
 
-        lines.append("## Related Notes")
-        lines.append("")
-        lines.append("<!-- Link to related notes here -->")
-        lines.append("")
+            backlink_sources = None
+            if fill:
+                # Validate API key
+                if not config.anthropic_api_key or config.anthropic_api_key == "your_anthropic_api_key_here":
+                    console.print(
+                        "[bold red]Error:[/bold red] ANTHROPIC_API_KEY not configured for --fill"
+                    )
+                    raise typer.Exit(1)
+
+                # Find backlinks from existing notes
+                from zettelkasten.utils.orphan_finder import OrphanFinder
+                finder = OrphanFinder(config.vault_path)
+                backlink_sources = finder.find_backlinks(title)
+
+                if backlink_sources:
+                    console.print(f"[dim]Found {len(backlink_sources)} note(s) that reference this concept[/dim]")
+
+            content_generator = NoteContentGenerator(config)
+            note_lines = content_generator.generate_concept_note_content(
+                title, backlink_sources, auto_fill=fill
+            )
+            lines.extend(note_lines)
+
+        elif note_type in ["source", "literature"]:
+            from zettelkasten.generators.note_content_generator import NoteContentGenerator
+
+            content_generator = NoteContentGenerator(config)
+            note_lines = content_generator.generate_source_note_content(auto_fill=fill)
+            lines.extend(note_lines)
+
+        elif note_type in ["fleeting", "fleeting-note"]:
+            from zettelkasten.generators.note_content_generator import NoteContentGenerator
+
+            content_generator = NoteContentGenerator(config)
+            note_lines = content_generator.generate_fleeting_note_content()
+            lines.extend(note_lines)
 
         # Write file
         filepath.write_text("\n".join(lines))
