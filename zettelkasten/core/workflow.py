@@ -109,16 +109,27 @@ class AddWorkflow:
             # Step 6: Generate Zettelkasten notes
             task = progress.add_task("Creating Zettelkasten notes...", total=None)
 
-            # Generate and save notes to staging area
-            saved_paths = self.zettel_generator.generate_and_save_notes(
-                content=processed_content,
-                summary=summary,
-                concepts=concepts,
-                source_url=url,
-                use_staging=True,  # Save to staging for review
-            )
+            try:
+                # Generate and save notes to staging area
+                saved_paths = self.zettel_generator.generate_and_save_notes(
+                    content=processed_content,
+                    summary=summary,
+                    concepts=concepts,
+                    source_url=url,
+                    use_staging=True,  # Save to staging for review
+                )
 
-            console.print(f"[green]✓[/green] Created {len(saved_paths)} notes in staging")
+                console.print(f"[green]✓[/green] Created {len(saved_paths)} notes in staging")
+            except FileExistsError as e:
+                progress.remove_task(task)
+                # Duplicate article content detected
+                console.print(f"\n[bold yellow]⚠ Duplicate Content Detected[/bold yellow]")
+                console.print(str(e))
+                console.print("\n[dim]Options:[/dim]")
+                console.print("  1. Use --force flag to overwrite the existing article")
+                console.print("  2. Check if this article was already added with a different URL")
+                raise
+
             progress.remove_task(task)
 
             # Cleanup if needed

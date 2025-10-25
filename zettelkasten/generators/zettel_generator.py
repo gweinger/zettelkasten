@@ -302,9 +302,13 @@ class ZettelGenerator:
         if content.content_type == ContentType.ARTICLE:
             from zettelkasten.processors.article_processor import ArticleProcessor
             article_processor = ArticleProcessor(self.config)
-            article_file = article_processor.save_full_text(source_filename, content)
-            # Store relative path from vault/sources/ note to vault/sources/articles/
-            content.metadata["article_file"] = f"articles/{article_file.name}"
+            try:
+                article_file = article_processor.save_full_text(source_filename, content)
+                # Store relative path from vault/sources/ note to vault/sources/articles/
+                content.metadata["article_file"] = f"articles/{article_file.name}"
+            except FileExistsError as e:
+                # Duplicate detected - this will be caught and handled by the caller
+                raise
 
         # Concept note filenames - use existing filenames if merging
         for concept in concepts:

@@ -120,18 +120,23 @@ class ArticleProcessor:
 
         return None
 
-    def save_full_text(self, source_filename: str, content: 'ProcessedContent') -> Path:
+    def save_full_text(self, source_filename: str, content: 'ProcessedContent', force: bool = False) -> Path:
         """
         Save article full text to a file for future reference.
 
         Uses the source note filename (minus .md) with -article.txt suffix for consistency.
+        Checks for duplicate content and prompts user if a duplicate is found.
 
         Args:
             source_filename: Base filename of the source note (without .md extension)
             content: ProcessedContent with article data
+            force: If True, overwrite without prompting
 
         Returns:
             Path to the saved file
+
+        Raises:
+            FileExistsError: If duplicate content found and user declines overwrite
         """
         # Use source filename with -article.txt suffix
         filename = f"{source_filename}-article.txt"
@@ -140,22 +145,103 @@ class ArticleProcessor:
         article_file = self.config.articles_path / filename
 
         # Build file content with metadata header
-        lines = []
-        lines.append("=" * 80)
-        lines.append(f"TITLE: {content.title}")
-        lines.append(f"URL: {content.url}")
-        lines.append(f"SAVED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        new_content_lines = []
+        new_content_lines.append("=" * 80)
+        new_content_lines.append(f"TITLE: {content.title}")
+        new_content_lines.append(f"URL: {content.url}")
+        new_content_lines.append(f"SAVED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         if content.metadata.get("author"):
-            lines.append(f"AUTHOR: {content.metadata['author']}")
+            new_content_lines.append(f"AUTHOR: {content.metadata['author']}")
         if content.metadata.get("published_date"):
-            lines.append(f"PUBLISHED: {content.metadata['published_date']}")
+            new_content_lines.append(f"PUBLISHED: {content.metadata['published_date']}")
         if content.metadata.get("site_name"):
-            lines.append(f"SITE: {content.metadata['site_name']}")
-        lines.append("=" * 80)
-        lines.append("")
-        lines.append(content.text_content)
+            new_content_lines.append(f"SITE: {content.metadata['site_name']}")
+        new_content_lines.append("=" * 80)
+        new_content_lines.append("")
+        new_content_lines.append(content.text_content)
+
+        new_content = "\n".join(new_content_lines)
+
+        # Check for duplicates - look for same text content
+        if article_file.exists() and not force:
+            existing_content = article_file.read_text()
+
+            # Compare the actual article text (after headers)
+            # Extract text content from both
+            existing_text = self._extract_text_from_saved(existing_content)
+
+            # Simple duplicate check: if text content is identical or very similar
+            if existing_text and self._content_matches(existing_text, content.text_content):
+                # Content is a duplicate
+                raise FileExistsError(
+                    f"Duplicate content detected. Article with same text already exists at:\n"
+                    f"  {article_file}\n"
+                    f"Use --force to overwrite."
+                )
 
         # Write to file
-        article_file.write_text("\n".join(lines))
+        article_file.write_text(new_content)
 
         return article_file
+
+    def _extract_text_from_saved(self, saved_content: str) -> str:
+        """
+        Extract the actual text content from a saved article file.
+
+        Args:
+            saved_content: Full saved file content with headers
+
+        Returns:
+            Just the text portion (after headers)
+        """
+        # Find the end of the header (second row of ===)
+        lines = saved_content.split("\n")
+        header_end = 0
+
+        for i, line in enumerate(lines):
+            if line.startswith("=" * 20):  # Look for separator line
+                header_end = i + 1
+                break
+
+        # Return everything after the header
+        if header_end > 0:
+            return "\n".join(lines[header_end:]).strip()
+
+        return saved_content
+
+    def _content_matches(self, existing_text: str, new_text: str, threshold: float = 0.95) -> bool:
+        """
+        Check if two texts are similar enough to be considered duplicates.
+
+        Uses simple string similarity check.
+
+        Args:
+            existing_text: Previously saved text
+            new_text: New text to compare
+            threshold: Similarity threshold (0-1)
+
+        Returns:
+            True if texts are similar enough to be duplicates
+        """
+        # Normalize both texts
+        existing_normalized = " ".join(existing_text.lower().split())
+        new_normalized = " ".join(new_text.lower().split())
+
+        # If they're identical
+        if existing_normalized == new_normalized:
+            return True
+
+        # If very similar length and content (at least 95% match)
+        if len(existing_normalized) > 100 and len(new_normalized) > 100:
+            # Check if one is mostly contained in the other
+            if existing_normalized in new_normalized or new_normalized in existing_normalized:
+                return True
+
+            # Simple character-level similarity
+            matching_chars = sum(1 for a, b in zip(existing_normalized, new_normalized) if a == b)
+            similarity = matching_chars / max(len(existing_normalized), len(new_normalized))
+
+            if similarity >= threshold:
+                return True
+
+        return False
