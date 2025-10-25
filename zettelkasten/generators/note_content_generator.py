@@ -131,6 +131,97 @@ class NoteContentGenerator:
 
         return lines
 
+    def generate_person_note_content(
+        self,
+        title: str,
+        auto_fill: bool = False,
+        research_data: Optional[Dict] = None,
+    ) -> List[str]:
+        """
+        Generate content for a person/contact note.
+
+        Creates a structured note with professional information:
+        - Professional summary
+        - Background
+        - Expertise areas
+        - Digital presence (website, LinkedIn, social media)
+        - Programs/ventures
+        - Key Quotes section
+        - Related Notes
+
+        Args:
+            title: Name of the person
+            auto_fill: If True, include research data
+            research_data: Pre-populated research data dictionary
+
+        Returns:
+            List of markdown lines for the note content
+        """
+        lines = []
+
+        # Add summary if available from research
+        if auto_fill and research_data and research_data.get('summary'):
+            lines.append(research_data['summary'])
+            lines.append('')
+        else:
+            lines.append('## Professional Summary')
+            lines.append('')
+            lines.append('<!-- Add professional summary here -->')
+            lines.append('')
+
+        # Add background section if available
+        if auto_fill and research_data and research_data.get('background'):
+            lines.append('## Background')
+            lines.append('')
+            lines.append(research_data['background'])
+            lines.append('')
+
+        # Add expertise section if available
+        if auto_fill and research_data and research_data.get('expertise'):
+            lines.append('## Expertise')
+            lines.append('')
+            lines.append(research_data['expertise'])
+            lines.append('')
+
+        # Add digital presence section if available
+        if auto_fill and research_data and research_data.get('digital_presence'):
+            lines.append('## Digital Presence')
+            lines.append('')
+            for platform, handle_or_url in research_data['digital_presence'].items():
+                if handle_or_url.startswith('http'):
+                    lines.append(f"- **{platform}**: {handle_or_url}")
+                else:
+                    lines.append(f"- **{platform}**: {handle_or_url}")
+            lines.append('')
+
+        # Add programs/ventures section if available
+        if auto_fill and research_data and research_data.get('programs_ventures'):
+            lines.append('## Programs & Ventures')
+            lines.append('')
+            for program in research_data['programs_ventures']:
+                lines.append(f"- {program}")
+            lines.append('')
+
+        # Add Key Quotes section
+        lines.append('## Key Quotes')
+        lines.append('')
+        lines.append('<!-- Add relevant quotes here -->')
+        lines.append('')
+
+        # Add Sources section
+        lines.append('## Sources')
+        lines.append('')
+        lines.append('<!-- Link to source notes here -->')
+        lines.append('')
+
+        # Add Related Notes section
+        lines.append('## Related Notes')
+        lines.append('')
+        lines.append('<!-- Link to related notes here -->')
+        lines.append('')
+
+        return lines
+
     def _generate_summary(self, concept_name: str) -> str:
         """
         Generate a summary of a concept using Claude.

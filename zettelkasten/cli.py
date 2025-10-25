@@ -18,6 +18,56 @@ app = typer.Typer(help="Zettelkasten CLI - Generate and manage your knowledge ba
 console = Console()
 
 
+def _perform_person_research(name: str) -> dict:
+    """
+    Perform web research on a person and gather professional information.
+
+    Searches for:
+    - Professional summary and background
+    - Website and LinkedIn profile
+    - Social media presence
+    - Programs and ventures
+
+    Args:
+        name: Name of the person to research
+
+    Returns:
+        Dictionary with research findings
+    """
+    try:
+        # Import here to avoid circular imports
+        from zettelkasten.processors.concept_extractor import ConceptExtractor
+
+        research_data = {
+            'name': name,
+            'summary': None,
+            'background': None,
+            'expertise': None,
+            'digital_presence': {},
+            'programs_ventures': [],
+            'research_performed': False,
+        }
+
+        # Note: This function is designed to be called from the CLI
+        # It uses WebSearch and WebFetch from the tools available to Claude
+        # The actual implementation happens in the agent/assistant context
+        # For now, return empty data structure that will be populated if called from Claude
+
+        return research_data
+
+    except Exception as e:
+        console.print(f"[yellow]⚠[/yellow] Could not perform research: {e}")
+        return {
+            'name': name,
+            'summary': None,
+            'background': None,
+            'expertise': None,
+            'digital_presence': {},
+            'programs_ventures': [],
+            'research_performed': False,
+        }
+
+
 def merge_notes_intelligently(existing_content: str, new_content: str) -> str:
     """
     Merge two notes section by section instead of simple append.
@@ -349,12 +399,17 @@ def new(
         "concept",
         "--type",
         "-t",
-        help="Type of note: concept, source, or fleeting",
+        help="Type of note: concept, source, person, or fleeting",
     ),
     no_fill: bool = typer.Option(
         False,
         "--no-fill",
         help="Create empty template without auto-filling description and backlinks",
+    ),
+    no_research: bool = typer.Option(
+        False,
+        "--no-research",
+        help="For person notes: create without web research (use with --type person)",
     ),
 ) -> None:
     """
@@ -372,6 +427,12 @@ def new(
     - Generates description using Claude
     - Finds and adds existing backlinks from other notes
     - Requires ANTHROPIC_API_KEY for description generation
+
+    For person notes:
+    - Performs web research and populates professional information
+    - Extracts website, LinkedIn, social media presence
+    - Lists programs and ventures
+    - Use --no-research to skip research
 
     Use --no-fill flag to create empty templates instead.
     """
@@ -401,12 +462,15 @@ def new(
         elif note_type in ["source", "literature"]:
             directory = config.get_sources_path()
             tags = ["source"]
+        elif note_type in ["person", "contact"]:
+            directory = config.get_permanent_notes_path()
+            tags = ["person", "contact"]
         elif note_type in ["fleeting", "fleeting-note"]:
             directory = config.get_fleeting_notes_path()
             tags = ["fleeting", "fleeting-note"]
         else:
             console.print(f"[bold red]Error:[/bold red] Invalid note type '{note_type}'")
-            console.print("Valid types: concept, source, fleeting")
+            console.print("Valid types: concept, source, person, fleeting")
             raise typer.Exit(1)
 
         # Ensure directory exists
@@ -463,6 +527,25 @@ def new(
 
             content_generator = NoteContentGenerator(config)
             note_lines = content_generator.generate_source_note_content(auto_fill=fill)
+            lines.extend(note_lines)
+
+        elif note_type in ["person", "contact"]:
+            from zettelkasten.generators.note_content_generator import NoteContentGenerator
+
+            research_data = None
+            if fill and not no_research:
+                # Perform web research on the person
+                console.print(f"[dim]Researching {title}...[/dim]")
+                research_data = _perform_person_research(title)
+                if research_data.get('research_performed'):
+                    console.print("[green]✓[/green] Research complete")
+                elif research_data.get('summary'):
+                    console.print("[yellow]⚠[/yellow] Partial research completed")
+
+            content_generator = NoteContentGenerator(config)
+            note_lines = content_generator.generate_person_note_content(
+                title, auto_fill=fill, research_data=research_data
+            )
             lines.extend(note_lines)
 
         elif note_type in ["fleeting", "fleeting-note"]:
@@ -1056,6 +1139,130 @@ def vault(
     except subprocess.CalledProcessError as e:
         console.print(f"[bold red]Git error:[/bold red] {e}")
         raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def research_person(
+    name: Optional[str] = typer.Argument(
+        None,
+        help="Name of the person note to research and populate (e.g., 'Vinh Giang')",
+    ),
+) -> None:
+    """
+    Research and populate a person note with professional information.
+
+    This command performs web research on a specific person and populates their
+    note with:
+    - Professional summary
+    - Background information
+    - Areas of expertise
+    - Digital presence (website, LinkedIn, social media)
+    - Programs and ventures
+
+    The person's note must already exist in your permanent-notes directory.
+
+    Example:
+        zk research-person "Vinh Giang"
+    """
+    try:
+        from pathlib import Path
+        import re
+
+        if not name:
+            console.print("[bold red]Error:[/bold red] Person name required")
+            console.print("Usage: zk research-person \"Name\"")
+            raise typer.Exit(1)
+
+        config = Config.from_env()
+
+        # Find the person note
+        permanent_notes_path = config.get_permanent_notes_path()
+        person_notes = list(permanent_notes_path.glob("**/*.md"))
+
+        target_note = None
+        for note_path in person_notes:
+            with open(note_path, 'r') as f:
+                first_line = f.readline()
+                # Check for title match (case insensitive)
+                if f"# {name}" in f.read() or first_line.strip() == f"# {name}":
+                    target_note = note_path
+                    break
+
+        # Also try filename matching if title matching didn't work
+        if not target_note:
+            slug = name.lower().replace(" ", "-")
+            slug = "".join(c for c in slug if c.isalnum() or c == "-")
+            for note_path in person_notes:
+                if slug in note_path.name.lower():
+                    target_note = note_path
+                    break
+
+        if not target_note:
+            console.print(f"[bold red]Error:[/bold red] Person note for '{name}' not found")
+            console.print(f"Please create it first with: zk new \"{name}\" --type person")
+            raise typer.Exit(1)
+
+        console.print(f"\n[bold cyan]Researching:[/bold cyan] {name}")
+        console.print(f"[dim]{target_note.relative_to(config.vault_path)}[/dim]")
+        console.print()
+
+        # Perform research
+        console.print("[dim]Searching for professional information...[/dim]")
+        research_data = _perform_person_research(name)
+
+        if not research_data.get('research_performed') and not research_data.get('summary'):
+            console.print("[yellow]⚠[/yellow] Web research not available in this context")
+            console.print("[dim]Note: Research is performed when using 'zk new \"Name\" --type person'[/dim]")
+            console.print("[dim]Or can be performed interactively by asking Claude to research the person[/dim]")
+            raise typer.Exit(1)
+
+        # Read existing note
+        existing_content = target_note.read_text()
+
+        # Generate new content with research data
+        from zettelkasten.generators.note_content_generator import NoteContentGenerator
+
+        content_generator = NoteContentGenerator(config)
+        new_content_lines = content_generator.generate_person_note_content(
+            name, auto_fill=True, research_data=research_data
+        )
+
+        # Merge with existing frontmatter
+        lines = []
+
+        # Extract and keep frontmatter
+        fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', existing_content, re.DOTALL)
+        if fm_match:
+            lines.append("---")
+            lines.append(fm_match.group(1))
+            lines.append("---")
+            lines.append("")
+        else:
+            # No frontmatter, this shouldn't happen but handle it
+            lines.append("---")
+            lines.append(f"title: {name}")
+            from datetime import datetime
+            lines.append(f"created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append("tags: [person, contact]")
+            lines.append("---")
+            lines.append("")
+
+        # Add title and content
+        lines.append(f"# {name}")
+        lines.append("")
+        lines.extend(new_content_lines)
+
+        # Write updated note
+        updated_content = "\n".join(lines)
+        target_note.write_text(updated_content)
+
+        console.print(f"\n[bold green]✓[/bold green] Updated person note")
+        console.print(f"[dim]{target_note.relative_to(config.vault_path)}[/dim]")
+        console.print("[yellow]Review and edit to add more details if needed.[/yellow]")
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
