@@ -340,7 +340,7 @@ class IndexGenerator:
             print(f"Warning: Could not parse {filepath.name}: {e}")
             return None
 
-    def _extract_frontmatter(self, content: str) -> Optional[Dict[str, str]]:
+    def _extract_frontmatter(self, content: str) -> Optional[Dict]:
         """
         Extract YAML frontmatter from markdown content.
 
@@ -358,13 +358,40 @@ class IndexGenerator:
         frontmatter_text = match.group(1)
         frontmatter = {}
 
-        # Simple YAML parser for key: value pairs
-        for line in frontmatter_text.split("\n"):
-            if ":" in line:
+        # Parse YAML - handle both simple key: value and list formats
+        lines = frontmatter_text.split("\n")
+        current_key = None
+        current_list = []
+
+        for line in lines:
+            # Check if line is a key: value pair
+            if ":" in line and not line.startswith(" "):
+                # Save previous list if any
+                if current_key and current_list:
+                    frontmatter[current_key] = current_list
+                    current_list = []
+
                 key, value = line.split(":", 1)
                 key = key.strip()
                 value = value.strip()
-                frontmatter[key] = value
+
+                if value:
+                    # Regular key: value pair
+                    frontmatter[key] = value
+                    current_key = None
+                else:
+                    # Might be start of a list
+                    current_key = key
+                    current_list = []
+
+            elif line.startswith("  - ") and current_key:
+                # List item
+                item = line.strip()[2:].strip()  # Remove "- " prefix
+                current_list.append(item)
+
+        # Save any remaining list
+        if current_key and current_list:
+            frontmatter[current_key] = current_list
 
         return frontmatter
 
