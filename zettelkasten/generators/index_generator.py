@@ -54,6 +54,11 @@ class IndexGenerator:
         if concept_index_path:
             indices["concepts"] = concept_index_path
 
+        # Generate person index
+        person_index_path = self.generate_person_index()
+        if person_index_path:
+            indices["people"] = person_index_path
+
         # Generate source index
         source_index_path = self.generate_source_index()
         if source_index_path:
@@ -129,6 +134,80 @@ class IndexGenerator:
 
         # Write index file
         index_path = permanent_notes_dir / "INDEX.md"
+        index_path.write_text("\n".join(lines))
+
+        return index_path
+
+    def generate_person_index(self) -> Optional[Path]:
+        """
+        Generate an alphabetical index of all person/contact notes.
+
+        Returns:
+            Path to the generated index file
+        """
+        permanent_notes_dir = self.config.get_permanent_notes_path()
+
+        # Find all markdown files
+        note_files = list(permanent_notes_dir.glob("*.md"))
+
+        # Exclude the index files themselves
+        note_files = [f for f in note_files if f.stem.upper() not in ["INDEX", "PEOPLE-INDEX", "PERSON-INDEX"]]
+
+        # Filter to only person notes (those with 'person' or 'contact' tag)
+        person_notes = []
+        for filepath in note_files:
+            metadata = self._parse_note_metadata(filepath)
+            if metadata and ("person" in metadata.tags or "contact" in metadata.tags):
+                person_notes.append(metadata)
+
+        if not person_notes:
+            return None
+
+        # Sort alphabetically by title
+        person_notes.sort(key=lambda n: n.title.lower())
+
+        # Generate markdown content
+        lines = []
+        lines.append("---")
+        lines.append("title: People Index")
+        lines.append(f"created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("tags: [index, people, contacts]")
+        lines.append("---")
+        lines.append("")
+        lines.append("# People Index")
+        lines.append("")
+        lines.append(f"*{len(person_notes)} people*")
+        lines.append("")
+        lines.append("Directory of professionals, speakers, and contacts in your Zettelkasten.")
+        lines.append("")
+
+        # Group by first letter
+        grouped_notes: Dict[str, List[NoteMetadata]] = defaultdict(list)
+        for note in person_notes:
+            first_letter = note.title[0].upper()
+            # Group numbers and special characters under '#'
+            if not first_letter.isalpha():
+                first_letter = "#"
+            grouped_notes[first_letter].append(note)
+
+        # Add alphabetical sections
+        for letter in sorted(grouped_notes.keys()):
+            lines.append(f"## {letter}")
+            lines.append("")
+            for note in grouped_notes[letter]:
+                # Create relative link to the note with description
+                relative_filename = note.filepath.stem
+
+                # Try to extract a brief description from the note content
+                description = self._extract_description(Path(note.filepath))
+                if description:
+                    lines.append(f"- **[[{relative_filename}|{note.title}]]**: {description}")
+                else:
+                    lines.append(f"- [[{relative_filename}|{note.title}]]")
+            lines.append("")
+
+        # Write index file
+        index_path = permanent_notes_dir / "PEOPLE-INDEX.md"
         index_path.write_text("\n".join(lines))
 
         return index_path
