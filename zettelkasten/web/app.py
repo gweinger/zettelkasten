@@ -105,7 +105,14 @@ async def view_index(request: Request, index_type: str):
 
     # Read and render markdown
     content = index_path.read_text()
-    html_content = markdown.markdown(content, extensions=['extra', 'codehilite'])
+
+    # Extract frontmatter properties
+    properties = extract_frontmatter_properties(content)
+
+    # Remove frontmatter from content before rendering
+    content_without_fm = remove_frontmatter(content)
+
+    html_content = markdown.markdown(content_without_fm, extensions=['extra', 'codehilite'])
 
     # Convert wikilinks to HTML links
     html_content = convert_wikilinks(html_content, base_path="")
@@ -116,6 +123,7 @@ async def view_index(request: Request, index_type: str):
             "request": request,
             "title": title,
             "content": html_content,
+            "properties": properties,
         }
     )
 
