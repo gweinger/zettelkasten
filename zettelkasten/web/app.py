@@ -48,11 +48,12 @@ async def home(request: Request):
 
     staging_files = list(staging_path.glob("**/*.md"))
 
-    # Count person notes
+    # Count person notes (properly parse tags from frontmatter)
     person_notes = []
     for note_file in permanent_notes:
         content = note_file.read_text()
-        if "tags:" in content and ("person" in content or "contact" in content):
+        tags = extract_tags_from_frontmatter(content)
+        if "person" in tags or "contact" in tags:
             person_notes.append(note_file)
 
     stats = {
@@ -183,6 +184,46 @@ async def view_staging(request: Request):
             "count": len(files_data),
         }
     )
+
+
+def extract_tags_from_frontmatter(content: str) -> List[str]:
+    """Extract tags from YAML frontmatter."""
+    import re
+
+    # Match YAML frontmatter between --- delimiters
+    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    if not match:
+        return []
+
+    frontmatter_text = match.group(1)
+    tags = []
+
+    # Parse YAML - handle both simple key: value and list formats
+    lines = frontmatter_text.split('\n')
+    in_tags = False
+
+    for line in lines:
+        # Check if this is the tags key
+        if line.startswith('tags:'):
+            value = line.split(':', 1)[1].strip()
+            if value:
+                # Inline format: tags: [tag1, tag2] or tags: tag1, tag2
+                value_clean = value.strip('[]')
+                tags = [t.strip() for t in value_clean.split(',') if t.strip()]
+                return tags
+            else:
+                # List format starts on next lines
+                in_tags = True
+        elif in_tags:
+            if line.startswith('  - '):
+                # List item
+                tag = line.strip()[2:].strip()
+                tags.append(tag)
+            elif line and not line.startswith(' '):
+                # End of tags list
+                break
+
+    return tags
 
 
 def extract_title(content: str) -> str:
