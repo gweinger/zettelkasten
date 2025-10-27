@@ -78,8 +78,8 @@ class IndexGenerator:
         # Find all markdown files
         note_files = list(permanent_notes_dir.glob("*.md"))
 
-        # Exclude the index file itself
-        note_files = [f for f in note_files if f.stem.upper() != "INDEX"]
+        # Exclude all index files
+        note_files = [f for f in note_files if f.stem.upper() not in ["INDEX", "PEOPLE-INDEX", "PERSON-INDEX"]]
 
         if not note_files:
             return None

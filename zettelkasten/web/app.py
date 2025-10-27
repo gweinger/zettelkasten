@@ -57,7 +57,7 @@ async def home(request: Request):
             person_notes.append(note_file)
 
     stats = {
-        "total_concepts": len(permanent_notes) - len(person_notes),
+        "total_concepts": len(permanent_notes),  # Include all notes (people are a subset)
         "total_people": len(person_notes),
         "total_sources": len(sources),
         "staging_files": len(staging_files),
