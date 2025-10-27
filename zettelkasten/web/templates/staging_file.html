@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Staging{% endblock %}
+
+{% block content %}
+<div class="note-container">
+    <div class="note-header">
+        <div>
+            <a href="/staging" class="back-link">← Back to Staging</a>
+            <p class="note-path">staging/{{ file_path }}</p>
+        </div>
+    </div>
+
+    <div class="staging-actions">
+        <form method="post" action="/staging/approve/{{ file_path }}" style="display: inline;">
+            <button type="submit" class="btn btn-primary">
+                ✓ Approve
+            </button>
+        </form>
+        <a href="/staging/edit/{{ file_path }}" class="btn btn-secondary">
+            ✏️ Edit
+        </a>
+        <button class="btn btn-danger" onclick="confirmDelete('{{ file_path }}')">
+            🗑️ Delete
+        </button>
+    </div>
+
+    {% if properties %}
+    <details class="properties-panel">
+        <summary class="properties-header">
+            <span class="properties-icon">▸</span>
+            <span class="properties-title">Properties</span>
+        </summary>
+        <div class="properties-content">
+            {% for key, value in properties.items() %}
+            <div class="property-row">
+                <span class="property-key">{{ key }}</span>
+                <span class="property-value">
+                    {% if value is string %}
+                        {{ value }}
+                    {% else %}
+                        {{ value | join(', ') }}
+                    {% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <div class="note-content">
+        {{ content | safe }}
+    </div>
+</div>
+
+<script>
+// Properties panel toggle animation
+document.addEventListener('DOMContentLoaded', function() {
+    const details = document.querySelector('.properties-panel');
+    if (details) {
+        details.addEventListener('toggle', function() {
+            const icon = this.querySelector('.properties-icon');
+            if (this.open) {
+                icon.style.transform = 'rotate(90deg)';
+            } else {
+                icon.style.transform = 'rotate(0deg)';
+            }
+        });
+    }
+});
+
+// Delete confirmation
+function confirmDelete(filePath) {
+    if (confirm('Are you sure you want to delete this file? This action cannot be undone.')) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/staging/delete/' + encodeURIComponent(filePath);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}

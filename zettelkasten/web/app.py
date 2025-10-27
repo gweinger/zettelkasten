@@ -315,6 +315,187 @@ async def view_staging(request: Request):
     )
 
 
+@app.get("/staging/view/{file_path:path}", response_class=HTMLResponse)
+async def view_staging_file(request: Request, file_path: str):
+    """View a specific file in staging area."""
+    staging_path = config.get_staging_path()
+    full_path = staging_path / file_path
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found in staging")
+
+    # Read file content
+    content = full_path.read_text()
+    title = extract_title(content)
+
+    # Extract properties
+    properties = extract_frontmatter_properties(content)
+
+    # Remove frontmatter and convert to HTML
+    content_without_fm = remove_frontmatter(content)
+    html_content = markdown.markdown(content_without_fm, extensions=['extra', 'codehilite'])
+    html_content = convert_wikilinks(html_content, base_path="")
+
+    return templates.TemplateResponse(
+        "staging_file.html",
+        {
+            "request": request,
+            "title": title,
+            "file_path": file_path,
+            "content": html_content,
+            "properties": properties,
+        }
+    )
+
+
+@app.get("/staging/edit/{file_path:path}", response_class=HTMLResponse)
+async def edit_staging_file_form(request: Request, file_path: str):
+    """Show edit form for staging file."""
+    staging_path = config.get_staging_path()
+    full_path = staging_path / file_path
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found in staging")
+
+    content = full_path.read_text()
+    title = extract_title(content)
+
+    return templates.TemplateResponse(
+        "staging_edit.html",
+        {
+            "request": request,
+            "title": title,
+            "file_path": file_path,
+            "content": content,
+            "error": None,
+        }
+    )
+
+
+@app.post("/staging/edit/{file_path:path}", response_class=HTMLResponse)
+async def edit_staging_file_save(request: Request, file_path: str, content: str = Form(...)):
+    """Save edited staging file."""
+    staging_path = config.get_staging_path()
+    full_path = staging_path / file_path
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found in staging")
+
+    try:
+        # Write the updated content
+        full_path.write_text(content)
+
+        # Redirect back to view
+        return RedirectResponse(url=f"/staging/view/{file_path}", status_code=303)
+    except Exception as e:
+        # Show error on edit form
+        title = extract_title(content)
+        return templates.TemplateResponse(
+            "staging_edit.html",
+            {
+                "request": request,
+                "title": title,
+                "file_path": file_path,
+                "content": content,
+                "error": str(e),
+            }
+        )
+
+
+@app.post("/staging/approve/{file_path:path}")
+async def approve_staging_file(file_path: str):
+    """Approve and move a single staging file to vault."""
+    import shutil
+
+    staging_path = config.get_staging_path()
+    full_path = staging_path / file_path
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found in staging")
+
+    try:
+        # Read file to check merge info
+        import re
+        content = full_path.read_text()
+
+        # Extract frontmatter to check for merge_into
+        frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+        is_merge = False
+        merge_target = None
+
+        if frontmatter_match:
+            frontmatter = frontmatter_match.group(1)
+            for line in frontmatter.split('\n'):
+                if line.startswith('merge_into:'):
+                    merge_target = line.split(':', 1)[1].strip()
+                if line.startswith('is_new:'):
+                    is_new_val = line.split(':', 1)[1].strip()
+                    is_merge = (is_new_val.lower() == 'false')
+
+        if is_merge and merge_target:
+            # Handle merge - this logic is from cli.py approve command
+            from zettelkasten.cli import merge_notes_intelligently
+            target_path = config.get_permanent_notes_path() / merge_target
+
+            if target_path.exists():
+                existing_content = target_path.read_text()
+                new_content_start = content.find('---', 3) + 3
+                new_content = content[new_content_start:].strip()
+
+                # Remove merge banner
+                if new_content.startswith('>'):
+                    lines = new_content.split('\n')
+                    new_content = '\n'.join([l for l in lines if not l.strip().startswith('>')])
+                    new_content = new_content.strip()
+
+                merged_content = merge_notes_intelligently(existing_content, new_content)
+                target_path.write_text(merged_content)
+                full_path.unlink()
+            else:
+                # Target not found, create new
+                destination_dir = config.get_permanent_notes_path()
+                destination = destination_dir / full_path.name
+                shutil.move(str(full_path), str(destination))
+        else:
+            # Normal move - determine destination from path
+            if "concepts" in full_path.parts or "permanent" in full_path.parts:
+                destination_dir = config.get_permanent_notes_path()
+            elif "sources" in full_path.parts:
+                destination_dir = config.get_sources_path()
+            else:
+                destination_dir = config.get_permanent_notes_path()
+
+            destination = destination_dir / full_path.name
+            shutil.move(str(full_path), str(destination))
+
+        # Rebuild indices
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_generator = IndexGenerator(config)
+        index_generator.rebuild_indices()
+
+        # Redirect back to staging list
+        return RedirectResponse(url="/staging", status_code=303)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error approving file: {str(e)}")
+
+
+@app.post("/staging/delete/{file_path:path}")
+async def delete_staging_file(file_path: str):
+    """Delete a staging file."""
+    staging_path = config.get_staging_path()
+    full_path = staging_path / file_path
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found in staging")
+
+    try:
+        full_path.unlink()
+        return RedirectResponse(url="/staging", status_code=303)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+
+
 def extract_frontmatter_properties(content: str) -> dict:
     """Extract all properties from YAML frontmatter as a dictionary."""
     import re

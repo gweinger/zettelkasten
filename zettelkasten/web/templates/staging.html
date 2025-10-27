@@ -23,20 +23,14 @@
     <div class="file-list">
         {% for file in files %}
         <div class="file-card">
-            <div class="file-info">
+            <a href="/staging/view/{{ file.path }}" class="file-info file-link">
                 <h3>{{ file.title }}</h3>
                 <p class="file-path">{{ file.path }}</p>
-            </div>
+            </a>
             <div class="file-actions">
-                <button class="btn btn-sm btn-primary" onclick="alert('Coming soon: Approve')">
-                    ✓ Approve
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="alert('Coming soon: Edit')">
-                    ✏️ Edit
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="alert('Coming soon: Delete')">
-                    ✗ Delete
-                </button>
+                <a href="/staging/view/{{ file.path }}" class="btn btn-sm btn-primary">
+                    👁️ View
+                </a>
             </div>
         </div>
         {% endfor %}

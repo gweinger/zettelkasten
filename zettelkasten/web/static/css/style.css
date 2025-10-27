@@ -326,6 +326,21 @@ body {
     font-family: 'Monaco', 'Courier New', monospace;
 }
 
+/* Staging Actions */
+.staging-actions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    margin-bottom: 1.5rem;
+}
+
+.staging-actions .btn {
+    text-decoration: none;
+}
+
 /* Note Content */
 .note-content,
 .index-content {
@@ -455,11 +470,29 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.file-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.file-link {
+    flex: 1;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.file-link:hover h3 {
+    color: var(--primary-color);
 }
 
 .file-info h3 {
     font-size: 1.125rem;
     margin-bottom: 0.25rem;
+    transition: color 0.2s;
 }
 
 .file-path {
@@ -471,6 +504,7 @@ body {
 .file-actions {
     display: flex;
     gap: 0.5rem;
+    flex-shrink: 0;
 }
 
 .bulk-actions {
@@ -523,6 +557,13 @@ body {
     font-size: 1rem;
     font-family: inherit;
     transition: border-color 0.2s;
+}
+
+.form-group textarea {
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    resize: vertical;
 }
 
 .form-group input:focus,
