@@ -11,8 +11,48 @@
         </div>
     </div>
 
+    {% if properties %}
+    <details class="properties-panel">
+        <summary class="properties-header">
+            <span class="properties-icon">▸</span>
+            <span class="properties-title">Properties</span>
+        </summary>
+        <div class="properties-content">
+            {% for key, value in properties.items() %}
+            <div class="property-row">
+                <span class="property-key">{{ key }}</span>
+                <span class="property-value">
+                    {% if value is string %}
+                        {{ value }}
+                    {% else %}
+                        {{ value | join(', ') }}
+                    {% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
     <article class="note-content">
         {{ content | safe }}
     </article>
 </div>
+
+<script>
+// Rotate arrow icon when properties panel is toggled
+document.addEventListener('DOMContentLoaded', function() {
+    const details = document.querySelector('.properties-panel');
+    if (details) {
+        details.addEventListener('toggle', function() {
+            const icon = this.querySelector('.properties-icon');
+            if (this.open) {
+                icon.textContent = '▾';
+            } else {
+                icon.textContent = '▸';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -160,8 +160,14 @@ async def view_note(request: Request, note_path: str):
     # Extract title from frontmatter or first heading
     title = extract_title(content)
 
+    # Extract frontmatter properties
+    properties = extract_frontmatter_properties(content)
+
+    # Remove frontmatter from content before rendering
+    content_without_fm = remove_frontmatter(content)
+
     # Render markdown
-    html_content = markdown.markdown(content, extensions=['extra', 'codehilite', 'fenced_code'])
+    html_content = markdown.markdown(content_without_fm, extensions=['extra', 'codehilite', 'fenced_code'])
 
     # Convert wikilinks to HTML links
     html_content = convert_wikilinks(html_content, base_path=str(full_path.parent.relative_to(config.vault_path)))
@@ -173,6 +179,7 @@ async def view_note(request: Request, note_path: str):
             "title": title,
             "content": html_content,
             "note_path": note_path,
+            "properties": properties,
         }
     )
 
@@ -206,6 +213,67 @@ async def view_staging(request: Request):
             "count": len(files_data),
         }
     )
+
+
+def extract_frontmatter_properties(content: str) -> dict:
+    """Extract all properties from YAML frontmatter as a dictionary."""
+    import re
+
+    # Match YAML frontmatter between --- delimiters
+    match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+    if not match:
+        return {}
+
+    frontmatter_text = match.group(1)
+    properties = {}
+
+    # Parse YAML - handle both simple key: value and list formats
+    lines = frontmatter_text.split('\n')
+    current_key = None
+    current_list = []
+
+    for line in lines:
+        # Check if line is a key: value pair
+        if ':' in line and not line.startswith(' '):
+            # Save previous list if any
+            if current_key and current_list:
+                properties[current_key] = current_list
+                current_list = []
+
+            key, value = line.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+
+            if value:
+                # Regular key: value pair
+                properties[key] = value
+                current_key = None
+            else:
+                # Might be start of a list
+                current_key = key
+                current_list = []
+
+        elif line.startswith('  - ') and current_key:
+            # List item
+            item = line.strip()[2:].strip()
+            current_list.append(item)
+
+    # Save any remaining list
+    if current_key and current_list:
+        properties[current_key] = current_list
+
+    return properties
+
+
+def remove_frontmatter(content: str) -> str:
+    """Remove YAML frontmatter from content."""
+    import re
+
+    # Remove frontmatter
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if match:
+        return content[match.end():]
+    return content
 
 
 def extract_tags_from_frontmatter(content: str) -> List[str]:
