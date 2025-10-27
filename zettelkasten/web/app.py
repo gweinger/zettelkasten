@@ -80,6 +80,7 @@ async def home(request: Request):
             "request": request,
             "stats": stats,
             "indexes": indexes,
+            "vault_name": config.vault_name,
         }
     )
 

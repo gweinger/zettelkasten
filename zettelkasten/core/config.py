@@ -27,6 +27,12 @@ class Config(BaseModel):
         description="RSS feed URL for the podcast",
     )
 
+    # Vault Configuration
+    vault_name: str = Field(
+        default="Your Zettelkasten",
+        description="Display name for your vault (shown in web UI)",
+    )
+
     # Paths
     vault_path: Path = Field(
         default=Path("./vault"),
@@ -87,6 +93,7 @@ class Config(BaseModel):
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
             podcast_rss_feed=os.getenv("PODCAST_RSS_FEED", ""),
+            vault_name=os.getenv("VAULT_NAME", "Your Zettelkasten"),
             vault_path=vault_path,
             summaries_path=Path(os.getenv("SUMMARIES_PATH", str(sources_base / "summaries"))),
             audio_path=Path(os.getenv("AUDIO_PATH", str(sources_base / "audio"))),
