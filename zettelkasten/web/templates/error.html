@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Error - {{ vault_name }}{% endblock %}
+
+{% block content %}
+<div class="add-url-container">
+    <h1>⚠️ Error</h1>
+    <p class="subtitle">Something went wrong</p>
+
+    <div class="alert alert-error">
+        <strong>Error Details:</strong>
+        <p style="margin-top: 0.5rem;">{{ error_message }}</p>
+    </div>
+
+    <div class="form-actions">
+        <a href="javascript:history.back()" class="btn btn-secondary">← Go Back</a>
+        <a href="/" class="btn btn-primary">Home</a>
+    </div>
+
+    {% if error_detail %}
+    <details style="margin-top: 2rem;">
+        <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.875rem;">Technical Details</summary>
+        <pre style="margin-top: 1rem; padding: 1rem; background: var(--surface); border-radius: 0.375rem; overflow-x: auto; font-size: 0.75rem;">{{ error_detail }}</pre>
+    </details>
+    {% endif %}
+</div>
+{% endblock %}

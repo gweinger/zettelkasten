@@ -13,7 +13,7 @@
     </div>
     {% endif %}
 
-    <form method="post" action="/staging/edit/{{ file_path }}" class="add-url-form">
+    <form method="post" action="/staging/edit/{{ file_path }}" class="add-url-form" id="editForm">
         <div class="form-group">
             <label for="content">Content</label>
             <textarea
@@ -27,9 +27,28 @@
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">💾 Save Changes</button>
-            <a href="/staging/view/{{ file_path }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary" id="saveBtn">
+                <span id="saveBtnText">💾 Save Changes</span>
+                <span id="saveBtnLoading" style="display: none;">⏳ Saving...</span>
+            </button>
+            <a href="/staging/view/{{ file_path }}" class="btn btn-secondary" id="cancelBtn">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+document.getElementById('editForm').addEventListener('submit', function() {
+    const saveBtn = document.getElementById('saveBtn');
+    const saveBtnText = document.getElementById('saveBtnText');
+    const saveBtnLoading = document.getElementById('saveBtnLoading');
+    const cancelBtn = document.getElementById('cancelBtn');
+
+    // Disable buttons and show loading state
+    saveBtn.disabled = true;
+    cancelBtn.style.pointerEvents = 'none';
+    cancelBtn.style.opacity = '0.5';
+    saveBtnText.style.display = 'none';
+    saveBtnLoading.style.display = 'inline';
+});
+</script>
 {% endblock %}

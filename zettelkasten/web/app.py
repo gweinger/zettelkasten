@@ -30,6 +30,40 @@ templates = Jinja2Templates(directory=str(templates_path))
 config = Config.from_env()
 
 
+# Exception handlers
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with custom error page."""
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "error_message": exc.detail,
+            "error_detail": None,
+        },
+        status_code=exc.status_code
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle general exceptions with custom error page."""
+    import traceback
+    error_detail = traceback.format_exc()
+
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "error_message": "An unexpected error occurred. Please check the technical details below or contact support.",
+            "error_detail": error_detail,
+        },
+        status_code=500
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page showing vault overview."""

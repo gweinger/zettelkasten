@@ -12,15 +12,16 @@
     </div>
 
     <div class="staging-actions">
-        <form method="post" action="/staging/approve/{{ file_path }}" style="display: inline;">
-            <button type="submit" class="btn btn-primary">
-                ✓ Approve
+        <form method="post" action="/staging/approve/{{ file_path }}" style="display: inline;" id="approveForm">
+            <button type="submit" class="btn btn-primary" id="approveBtn">
+                <span id="approveBtnText">✓ Approve</span>
+                <span id="approveBtnLoading" style="display: none;">⏳ Approving...</span>
             </button>
         </form>
-        <a href="/staging/edit/{{ file_path }}" class="btn btn-secondary">
+        <a href="/staging/edit/{{ file_path }}" class="btn btn-secondary" id="editBtn">
             ✏️ Edit
         </a>
-        <button class="btn btn-danger" onclick="confirmDelete('{{ file_path }}')">
+        <button class="btn btn-danger" id="deleteBtn" onclick="confirmDelete('{{ file_path }}')">
             🗑️ Delete
         </button>
     </div>
@@ -65,6 +66,27 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 icon.style.transform = 'rotate(0deg)';
             }
+        });
+    }
+
+    // Approve form loading state
+    const approveForm = document.getElementById('approveForm');
+    if (approveForm) {
+        approveForm.addEventListener('submit', function() {
+            const approveBtn = document.getElementById('approveBtn');
+            const approveBtnText = document.getElementById('approveBtnText');
+            const approveBtnLoading = document.getElementById('approveBtnLoading');
+            const editBtn = document.getElementById('editBtn');
+            const deleteBtn = document.getElementById('deleteBtn');
+
+            // Disable all buttons and show loading state
+            approveBtn.disabled = true;
+            editBtn.style.pointerEvents = 'none';
+            editBtn.style.opacity = '0.5';
+            deleteBtn.disabled = true;
+            deleteBtn.style.opacity = '0.5';
+            approveBtnText.style.display = 'none';
+            approveBtnLoading.style.display = 'inline';
         });
     }
 });
