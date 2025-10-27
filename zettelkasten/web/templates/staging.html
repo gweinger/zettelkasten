@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Staging Area - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="staging-container">
+    <div class="staging-header">
+        <a href="/" class="back-link">← Back to Home</a>
+        <h1>Staging Area</h1>
+        <p class="subtitle">Review notes before approving them to your vault</p>
+    </div>
+
+    {% if count == 0 %}
+    <div class="empty-state">
+        <p>📭 No files in staging</p>
+        <p class="text-muted">Process URLs with 'zk add &lt;url&gt;' to generate notes in staging.</p>
+    </div>
+    {% else %}
+    <div class="staging-stats">
+        <strong>{{ count }}</strong> file(s) waiting for review
+    </div>
+
+    <div class="file-list">
+        {% for file in files %}
+        <div class="file-card">
+            <div class="file-info">
+                <h3>{{ file.title }}</h3>
+                <p class="file-path">{{ file.path }}</p>
+            </div>
+            <div class="file-actions">
+                <button class="btn btn-sm btn-primary" onclick="alert('Coming soon: Approve')">
+                    ✓ Approve
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="alert('Coming soon: Edit')">
+                    ✏️ Edit
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="alert('Coming soon: Delete')">
+                    ✗ Delete
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="bulk-actions">
+        <button class="btn btn-primary" onclick="alert('Coming soon: Approve All')">
+            ✓ Approve All
+        </button>
+        <button class="btn btn-danger" onclick="alert('Coming soon: Clear All')">
+            🗑️ Clear All
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

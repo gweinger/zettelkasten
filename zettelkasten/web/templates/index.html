@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="index-container">
+    <div class="index-header">
+        <a href="/" class="back-link">← Back to Home</a>
+        <h1>{{ title }}</h1>
+    </div>
+
+    <div class="index-content">
+        {{ content | safe }}
+    </div>
+</div>
+{% endblock %}

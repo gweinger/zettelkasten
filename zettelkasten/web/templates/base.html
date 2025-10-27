@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Zettelkasten{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">🗂️ Zettelkasten</a>
+            <ul class="nav-menu">
+                <li><a href="/">Home</a></li>
+                <li><a href="/indexes/concepts">Concepts</a></li>
+                <li><a href="/indexes/people">People</a></li>
+                <li><a href="/indexes/sources">Sources</a></li>
+                <li><a href="/staging">Staging</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>Zettelkasten Web UI v0.1.0</p>
+    </footer>
+</body>
+</html>

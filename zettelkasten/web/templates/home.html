@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <h1>Welcome to Your Zettelkasten</h1>
+    <p class="subtitle">Your personal knowledge management system</p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>📝 Concepts</h3>
+            <div class="stat-number">{{ stats.total_concepts }}</div>
+            <a href="/indexes/concepts" class="stat-link">Browse →</a>
+        </div>
+
+        <div class="stat-card">
+            <h3>👤 People</h3>
+            <div class="stat-number">{{ stats.total_people }}</div>
+            <a href="/indexes/people" class="stat-link">Browse →</a>
+        </div>
+
+        <div class="stat-card">
+            <h3>📚 Sources</h3>
+            <div class="stat-number">{{ stats.total_sources }}</div>
+            <a href="/indexes/sources" class="stat-link">Browse →</a>
+        </div>
+
+        <div class="stat-card {% if stats.staging_files > 0 %}has-items{% endif %}">
+            <h3>⏳ Staging</h3>
+            <div class="stat-number">{{ stats.staging_files }}</div>
+            <a href="/staging" class="stat-link">Review →</a>
+        </div>
+    </div>
+
+    <div class="actions-section">
+        <h2>Quick Actions</h2>
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="alert('Coming soon: Add from URL')">
+                🌐 Add from URL
+            </button>
+            <button class="btn btn-secondary" onclick="alert('Coming soon: Create Note')">
+                ✏️ Create Note
+            </button>
+            <button class="btn btn-secondary" onclick="alert('Coming soon: Search')">
+                🔍 Search
+            </button>
+        </div>
+    </div>
+
+    {% if not indexes.concept_index_exists or not indexes.people_index_exists or not indexes.sources_index_exists %}
+    <div class="alert alert-info">
+        <strong>Notice:</strong> Some indexes haven't been generated yet.
+        Run <code>zk index</code> from the terminal to create them.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
