@@ -124,13 +124,32 @@ async def view_index(request: Request, index_type: str):
 async def view_note(request: Request, note_path: str):
     """View a specific note."""
 
-    # Construct full path
+    # Construct full path - try direct path first
     full_path = config.vault_path / note_path
     if not full_path.suffix:
         full_path = full_path.with_suffix(".md")
 
+    # If not found directly, search in common directories
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail="Note not found")
+        # Try to find the note by filename in permanent-notes, sources, etc.
+        filename = Path(note_path).name
+        if not filename.endswith('.md'):
+            filename = filename + '.md'
+
+        search_dirs = [
+            config.get_permanent_notes_path(),
+            config.get_sources_path(),
+            config.get_fleeting_notes_path(),
+        ]
+
+        for search_dir in search_dirs:
+            potential_path = search_dir / filename
+            if potential_path.exists():
+                full_path = potential_path
+                break
+
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="Note not found")
 
     # Read and render markdown
     content = full_path.read_text()
