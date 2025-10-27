@@ -131,18 +131,21 @@ async def view_note(request: Request, note_path: str):
 
     # If not found directly, search in common directories
     if not full_path.exists():
-        # Try to find the note by filename in permanent-notes, sources, etc.
+        # Try to find the note by filename in permanent-notes, sources/summaries, etc.
         filename = Path(note_path).name
         if not filename.endswith('.md'):
             filename = filename + '.md'
 
         search_dirs = [
             config.get_permanent_notes_path(),
-            config.get_sources_path(),
+            config.get_sources_path(),  # For source summaries
+            config.get_sources_path().parent / "sources" / "summaries",  # Explicit summaries path
             config.get_fleeting_notes_path(),
         ]
 
         for search_dir in search_dirs:
+            if not search_dir.exists():
+                continue
             potential_path = search_dir / filename
             if potential_path.exists():
                 full_path = potential_path
@@ -280,6 +283,15 @@ def convert_wikilinks(html: str, base_path: str = "") -> str:
         # Remove .md extension if present
         if link_target.endswith('.md'):
             link_target = link_target[:-3]
+
+        # Handle relative paths in source notes
+        # If link starts with "summaries/" or "../", resolve it properly
+        if link_target.startswith('../'):
+            # Remove ../ prefix - our view_note will search for it
+            link_target = link_target.replace('../', '')
+        elif link_target.startswith('summaries/'):
+            # This is a relative path from sources/ directory
+            link_target = 'sources/' + link_target
 
         # Create URL-friendly path
         url = f"/note/{link_target}"
