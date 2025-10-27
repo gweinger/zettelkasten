@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Add URL - {{ vault_name }}{% endblock %}
+
+{% block content %}
+<div class="add-url-container">
+    <h1>Add Content from URL</h1>
+    <p class="subtitle">Process content from YouTube, podcasts, or articles into your Zettelkasten</p>
+
+    {% if error %}
+    <div class="alert alert-error">
+        <strong>Error:</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/add-url" class="add-url-form">
+        <div class="form-group">
+            <label for="url">URL</label>
+            <input
+                type="url"
+                id="url"
+                name="url"
+                placeholder="https://youtube.com/watch?v=..."
+                required
+                autofocus
+            >
+            <p class="form-help">Supports YouTube videos, podcast episodes, and blog articles</p>
+        </div>
+
+        <div class="form-group checkbox-group">
+            <label>
+                <input type="checkbox" name="force" value="true">
+                <span>Force reprocessing (if URL already processed)</span>
+            </label>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Process URL</button>
+            <a href="/" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <div class="info-section">
+        <h2>Supported Content Types</h2>
+        <ul>
+            <li><strong>YouTube Videos:</strong> Downloads audio, transcribes, and extracts concepts</li>
+            <li><strong>Podcast Episodes:</strong> Processes audio from Apple Podcasts, Spotify, and RSS feeds</li>
+            <li><strong>Blog Articles:</strong> Extracts text content and identifies key concepts</li>
+        </ul>
+
+        <p class="workflow-note">
+            <strong>What happens next:</strong> The content will be downloaded, transcribed (if audio/video),
+            analyzed with Claude AI to extract key concepts, and saved to the staging area for your review.
+            You can then review and approve the notes to add them to your vault.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Processing Complete - {{ vault_name }}{% endblock %}
+
+{% block content %}
+<div class="result-container">
+    <h1>✓ Processing Complete</h1>
+    <p class="subtitle">Content has been processed and saved to staging</p>
+
+    <div class="alert alert-success">
+        <strong>Success!</strong> Generated {{ file_count }} note(s) from the URL
+    </div>
+
+    <div class="source-info">
+        <h2>Source</h2>
+        <p><strong>URL:</strong> <a href="{{ url }}" target="_blank">{{ url }}</a></p>
+        {% if title %}
+        <p><strong>Title:</strong> {{ title }}</p>
+        {% endif %}
+    </div>
+
+    <div class="generated-files">
+        <h2>Generated Notes ({{ file_count }})</h2>
+        <ul class="file-list">
+            {% for file_path in file_paths %}
+            <li>
+                <svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 2h6l4 4v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+                {{ file_path }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="next-steps">
+        <h2>Next Steps</h2>
+        <ol>
+            <li>Review the generated notes in the staging area</li>
+            <li>Edit or refine the content as needed</li>
+            <li>Approve the notes to move them to your vault</li>
+        </ol>
+    </div>
+
+    <div class="form-actions">
+        <a href="/staging" class="btn btn-primary">Go to Staging Area</a>
+        <a href="/add-url" class="btn btn-secondary">Process Another URL</a>
+        <a href="/" class="btn btn-secondary">Home</a>
+    </div>
+</div>
+{% endblock %}

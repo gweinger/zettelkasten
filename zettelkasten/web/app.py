@@ -3,13 +3,14 @@
 from pathlib import Path
 from typing import List, Optional
 import markdown
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from zettelkasten.core.config import Config
 from zettelkasten.core.models import ContentType
+from zettelkasten.core.workflow import AddWorkflow
 
 # Initialize FastAPI app
 app = FastAPI(title="Zettelkasten Web UI", version="0.1.0")
@@ -191,6 +192,96 @@ async def view_note(request: Request, note_path: str):
             "properties": properties,
         }
     )
+
+
+@app.get("/add-url", response_class=HTMLResponse)
+async def add_url_form(request: Request, error: Optional[str] = None):
+    """Show the Add URL form."""
+    return templates.TemplateResponse(
+        "add_url.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "error": error,
+        }
+    )
+
+
+@app.post("/add-url", response_class=HTMLResponse)
+async def add_url_submit(request: Request, url: str = Form(...), force: Optional[str] = Form(None)):
+    """Process URL submission."""
+    force_bool = force == "true"
+
+    try:
+        # Validate API key
+        if not config.anthropic_api_key or config.anthropic_api_key == "your_anthropic_api_key_here":
+            error = "ANTHROPIC_API_KEY not configured. Please add your Anthropic API key to the .env file."
+            return templates.TemplateResponse(
+                "add_url.html",
+                {
+                    "request": request,
+                    "vault_name": config.vault_name,
+                    "error": error,
+                }
+            )
+
+        # Create workflow and process URL
+        workflow = AddWorkflow(config)
+        saved_paths = workflow.process_url(url, force=force_bool)
+
+        # Extract relative paths for display
+        file_paths = [str(path.relative_to(config.vault_path)) for path in saved_paths]
+
+        # Try to extract title from first file
+        title = None
+        if saved_paths:
+            try:
+                first_file_content = saved_paths[0].read_text()
+                # Look for title in frontmatter or first heading
+                lines = first_file_content.split('\n')
+                for line in lines:
+                    if line.startswith('title:'):
+                        title = line.split(':', 1)[1].strip()
+                        break
+                    elif line.startswith('# '):
+                        title = line[2:].strip()
+                        break
+            except Exception:
+                pass
+
+        return templates.TemplateResponse(
+            "add_url_result.html",
+            {
+                "request": request,
+                "vault_name": config.vault_name,
+                "url": url,
+                "title": title,
+                "file_count": len(saved_paths),
+                "file_paths": file_paths,
+            }
+        )
+
+    except ValueError as e:
+        # Show error on the form page
+        return templates.TemplateResponse(
+            "add_url.html",
+            {
+                "request": request,
+                "vault_name": config.vault_name,
+                "error": str(e),
+            }
+        )
+    except Exception as e:
+        # Show unexpected errors
+        error = f"Unexpected error: {str(e)}"
+        return templates.TemplateResponse(
+            "add_url.html",
+            {
+                "request": request,
+                "vault_name": config.vault_name,
+                "error": error,
+            }
+        )
 
 
 @app.get("/staging", response_class=HTMLResponse)
