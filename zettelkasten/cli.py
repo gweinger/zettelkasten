@@ -2201,6 +2201,13 @@ def generate_questions(
             console.print("[dim]Tip: Use --output to save questions to a file[/dim]")
             console.print()
 
+        # Rebuild indices to add the episode and person to the knowledge base
+        console.print("[dim]Rebuilding indices to add episode and person...[/dim]")
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_generator = IndexGenerator(config)
+        index_generator.rebuild_indices()
+        console.print(f"[bold green]✓ Indices rebuilt[/bold green]")
+
     except FileNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)

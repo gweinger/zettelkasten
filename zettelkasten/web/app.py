@@ -553,6 +553,11 @@ async def generate_interview_questions_workflow(
         questions_file = episode_path / "interview questions.md"
         generator.save_questions(questions, questions_file)
 
+        # Rebuild indices to add the episode and person to the knowledge base
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_generator = IndexGenerator(config)
+        index_generator.rebuild_indices()
+
         set_flash(request, f"✓ Interview questions generated and saved for '{guest_name}'", "success")
         return RedirectResponse(url=f"/note/episodes/{guest_name}/index", status_code=303)
 
