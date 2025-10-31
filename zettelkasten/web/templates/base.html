@@ -13,6 +13,16 @@
             <ul class="nav-menu">
                 <li><a href="/" {% if active_section == 'home' %}class="active"{% endif %}>Home</a></li>
 
+                <!-- Zettelkasten Indexes Dropdown -->
+                <li class="nav-dropdown">
+                    <a href="#" class="nav-dropdown-trigger">Zettelkasten</a>
+                    <ul class="nav-submenu">
+                        <li><a href="/indexes/concepts" {% if active_section == 'concepts' %}class="active"{% endif %}>Concepts</a></li>
+                        <li><a href="/indexes/people" {% if active_section == 'people' %}class="active"{% endif %}>People</a></li>
+                        <li><a href="/indexes/sources" {% if active_section == 'sources' %}class="active"{% endif %}>Sources</a></li>
+                    </ul>
+                </li>
+
                 <!-- Workflows Dropdown -->
                 <li class="nav-dropdown">
                     <a href="#" class="nav-dropdown-trigger">⚙️ Workflows</a>
@@ -21,16 +31,6 @@
                         <li><a href="/staging" {% if active_section == 'staging' %}class="active"{% endif %}>Staging Area</a></li>
                         <li><a href="/episodes" {% if active_section == 'episodes' %}class="active"{% endif %}>Podcast Episodes</a></li>
                         <li><a href="/workflows/interview-questions" {% if active_section == 'interview-questions' %}class="active"{% endif %}>Generate Interview Questions</a></li>
-                    </ul>
-                </li>
-
-                <!-- Indexes -->
-                <li class="nav-dropdown">
-                    <a href="#" class="nav-dropdown-trigger">📚 Indexes</a>
-                    <ul class="nav-submenu">
-                        <li><a href="/indexes/concepts" {% if active_section == 'concepts' %}class="active"{% endif %}>Concepts</a></li>
-                        <li><a href="/indexes/people" {% if active_section == 'people' %}class="active"{% endif %}>People</a></li>
-                        <li><a href="/indexes/sources" {% if active_section == 'sources' %}class="active"{% endif %}>Sources</a></li>
                     </ul>
                 </li>
             </ul>
