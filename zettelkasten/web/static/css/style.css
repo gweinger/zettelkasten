@@ -121,6 +121,8 @@ body {
     z-index: 1000;
 }
 
+/* Show on hover or when active (clicked) */
+.nav-dropdown:hover .nav-submenu,
 .nav-submenu.active {
     display: block;
 }

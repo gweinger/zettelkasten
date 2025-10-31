@@ -47,6 +47,8 @@
 
     <script>
         function toggleDropdown(event) {
+            // Only toggle dropdown on click, don't navigate
+            event.preventDefault();
             const trigger = event.currentTarget;
             const menuId = trigger.getAttribute('data-dropdown-toggle');
             const menu = document.getElementById(menuId);
