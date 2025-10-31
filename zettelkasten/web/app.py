@@ -553,6 +553,12 @@ async def generate_interview_questions_workflow(
         questions_file = episode_path / "interview questions.md"
         generator.save_questions(questions, questions_file)
 
+        # Ensure episode index.md exists
+        generator.ensure_episode_index(guest_name, episode_path)
+
+        # Create person note if it doesn't exist
+        generator.ensure_person_note(guest_name)
+
         # Rebuild indices to add the episode and person to the knowledge base
         from zettelkasten.generators.index_generator import IndexGenerator
         index_generator = IndexGenerator(config)

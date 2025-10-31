@@ -2201,6 +2201,14 @@ def generate_questions(
             console.print("[dim]Tip: Use --output to save questions to a file[/dim]")
             console.print()
 
+        # Ensure episode index.md exists
+        episode_path = config.find_episode_path(guest_name)
+        if episode_path:
+            generator.ensure_episode_index(guest_name, episode_path)
+
+        # Create person note if it doesn't exist
+        generator.ensure_person_note(guest_name)
+
         # Rebuild indices to add the episode and person to the knowledge base
         console.print("[dim]Rebuilding indices to add episode and person...[/dim]")
         from zettelkasten.generators.index_generator import IndexGenerator

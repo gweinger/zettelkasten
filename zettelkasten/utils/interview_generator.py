@@ -164,3 +164,67 @@ Transcript:
             output_path: Path where to save the file
         """
         output_path.write_text(questions, encoding='utf-8')
+
+    def ensure_episode_index(self, guest_name: str, episode_path: Path) -> None:
+        """
+        Ensure an index.md file exists in the episode directory.
+        Creates one if it doesn't exist.
+
+        Args:
+            guest_name: Name of the guest
+            episode_path: Path to the episode directory
+        """
+        index_file = episode_path / "index.md"
+        if index_file.exists():
+            return
+
+        # Create index.md with basic frontmatter
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        index_content = f"""---
+title: "{guest_name}"
+date: {today}
+type: episode
+guest: "{guest_name}"
+---
+
+# {guest_name}
+
+Episode with {guest_name}.
+"""
+        index_file.write_text(index_content, encoding='utf-8')
+
+    def ensure_person_note(self, guest_name: str) -> None:
+        """
+        Ensure a person note exists in the permanent-notes directory for the guest.
+        Creates one if it doesn't exist.
+
+        Args:
+            guest_name: Name of the guest
+        """
+        permanent_notes_dir = self.config.get_permanent_notes_path()
+
+        # Create a safe filename from the guest name
+        safe_filename = guest_name.lower().replace(" ", "-") + ".md"
+        person_file = permanent_notes_dir / safe_filename
+
+        # If file already exists, don't overwrite it
+        if person_file.exists():
+            return
+
+        # Create person note with basic frontmatter
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        person_content = f"""---
+title: "{guest_name}"
+date: {today}
+tags: [person, guest]
+---
+
+# {guest_name}
+
+Podcast guest.
+"""
+        person_file.write_text(person_content, encoding='utf-8')
