@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Workflows - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="workflows-container">
+    <h1>Workflows</h1>
+    <p class="subtitle">Organize and manage your Zettelkasten content</p>
+
+    <div class="workflows-grid">
+        <!-- Add from URL Card -->
+        <div class="workflow-card">
+            <div class="workflow-icon">🔗</div>
+            <h2>Add from URL</h2>
+            <p>Extract and process content from web links, articles, and online resources.</p>
+            <a href="/add-url" class="btn-small">Get Started</a>
+        </div>
+
+        <!-- Staging Area Card -->
+        <div class="workflow-card">
+            <div class="workflow-icon">📋</div>
+            <h2>Staging Area</h2>
+            <p>Review, edit, and approve content before adding it to your knowledge base.</p>
+            <a href="/staging" class="btn-small">View Staging</a>
+        </div>
+
+        <!-- Generate Interview Questions Card -->
+        <div class="workflow-card">
+            <div class="workflow-icon">🎤</div>
+            <h2>Generate Interview Questions</h2>
+            <p>Create contextual interview questions from podcast prep call transcripts.</p>
+            <a href="/workflows/interview-questions" class="btn-small">Generate Questions</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.workflows-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.workflows-container h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.workflows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-top: 3rem;
+}
+
+.workflow-card {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 2rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+}
+
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.workflow-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.workflow-card h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+}
+
+.workflow-card p {
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+    flex-grow: 1;
+}
+
+.workflow-card .btn-small {
+    align-self: flex-start;
+}
+</style>
+{% endblock %}

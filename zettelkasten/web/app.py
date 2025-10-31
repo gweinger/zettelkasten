@@ -465,6 +465,19 @@ async def remove_episode(request: Request, episode_name: str, background_tasks: 
 
 
 # Workflow Routes
+@app.get("/workflows", response_class=HTMLResponse)
+async def workflows_main(request: Request):
+    """Show the main workflows page."""
+    return templates.TemplateResponse(
+        "workflows.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "active_section": "workflows",
+        }
+    )
+
+
 @app.get("/workflows/interview-questions", response_class=HTMLResponse)
 async def workflow_interview_questions(request: Request):
     """Show the generate interview questions workflow page."""
