@@ -4,6 +4,7 @@ import warnings
 warnings.filterwarnings("ignore", category=Warning, module="urllib3")
 
 import typer
+import requests
 from rich.console import Console
 from pathlib import Path
 from typing import Optional
@@ -1426,6 +1427,783 @@ def orphans(
             console.print("\nSupported actions: list, fill, fill-all")
             raise typer.Exit(1)
 
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def rss(
+    action: str = typer.Argument(
+        "status",
+        help="Action: status, download, update, list, link, generate-episode-rss, or sync-all",
+    ),
+    episode_name: Optional[str] = typer.Argument(
+        None,
+        help="Episode name/directory (for link and generate-episode-rss actions)",
+    ),
+    url: Optional[str] = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help="RSS feed URL (for download/update)",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force overwrite of existing file",
+    ),
+    rss_title: Optional[str] = typer.Option(
+        None,
+        "--title",
+        "-t",
+        help="Override RSS episode title (for generate-episode-rss)",
+    ),
+) -> None:
+    """
+    Manage podcast RSS feed and link episodes.
+
+    Download and manage a local copy of the podcast RSS feed for reference,
+    link episodes to RSS data, and generate episode-specific RSS files.
+
+    Examples:
+        zk rss status                              # Show RSS feed status
+        zk rss download                            # Download RSS feed
+        zk rss update                              # Update existing feed
+        zk rss list                                # List episodes in feed
+        zk rss link "Grant Harris"                 # Link episode to RSS feed
+        zk rss generate-episode-rss "Grant Harris" # Generate episode.rss file
+        zk rss sync-all                            # Sync all episodes with RSS
+    """
+    try:
+        from zettelkasten.utils.rss_manager import RSSManager
+
+        config = Config.from_env()
+        rss_manager = RSSManager(config)
+
+        if action == "status":
+            console.print("\n[bold cyan]RSS Feed Status[/bold cyan]\n")
+
+            # Check if feed file exists
+            if rss_manager.rss_feed_file.exists():
+                try:
+                    info = rss_manager.get_feed_info()
+                    console.print(f"[green]✓ Local feed found[/green]")
+                    console.print(f"  [cyan]Location:[/cyan] {info['file_path']}")
+                    console.print(f"  [cyan]Podcast:[/cyan] {info['podcast_title']}")
+                    console.print(f"  [cyan]Episodes:[/cyan] {info['episode_count']}")
+                    console.print(f"  [cyan]Size:[/cyan] {info['file_size_kb']:.1f} KB")
+                    console.print(f"  [cyan]Last updated:[/cyan] {info['last_modified'].strftime('%Y-%m-%d %H:%M:%S')}")
+                except Exception as e:
+                    console.print(f"[red]✗ Error reading feed:[/red] {e}")
+            else:
+                console.print(f"[yellow]ℹ No local feed found[/yellow]")
+                console.print(f"  Location: {rss_manager.rss_feed_file}")
+
+            # Show configured feed URL
+            if rss_manager.rss_feed_url:
+                console.print(f"\n[cyan]Configured URL:[/cyan]")
+                console.print(f"  {rss_manager.rss_feed_url}")
+            else:
+                console.print(f"\n[yellow]⚠ No RSS feed URL configured[/yellow]")
+                console.print(f"  Set PODCAST_RSS_FEED in .env file")
+            console.print()
+
+        elif action == "download":
+            feed_url = url or rss_manager.rss_feed_url
+            if not feed_url:
+                console.print("[bold red]Error:[/bold red] No URL provided")
+                console.print("  Either pass --url or set PODCAST_RSS_FEED in .env")
+                raise typer.Exit(1)
+
+            # Check if file exists
+            if rss_manager.rss_feed_file.exists() and not force:
+                console.print("[bold red]Error:[/bold red] RSS feed file already exists")
+                console.print(f"  {rss_manager.rss_feed_file}")
+                console.print("  Use --force to overwrite")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Downloading RSS feed[/bold cyan]")
+            console.print(f"[dim]URL: {feed_url}[/dim]\n")
+
+            try:
+                file_path, info = rss_manager.download_feed(url=feed_url, overwrite=force)
+                console.print(f"[green]✓ Feed downloaded successfully[/green]")
+                console.print(f"  [cyan]Location:[/cyan] {file_path}")
+                console.print(f"  [cyan]Podcast:[/cyan] {info['podcast_title']}")
+                console.print(f"  [cyan]Episodes:[/cyan] {info['episode_count']}")
+                console.print(f"  [cyan]Size:[/cyan] {info['file_size_kb']:.1f} KB")
+                console.print()
+
+            except requests.RequestException as e:
+                console.print(f"[bold red]Error:[/bold red] Failed to download feed")
+                console.print(f"  {e}")
+                raise typer.Exit(1)
+
+        elif action == "update":
+            if not rss_manager.rss_feed_url:
+                console.print("[bold red]Error:[/bold red] No RSS feed URL configured")
+                console.print("  Set PODCAST_RSS_FEED in .env")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Updating RSS feed[/bold cyan]")
+            console.print(f"[dim]URL: {rss_manager.rss_feed_url}[/dim]\n")
+
+            try:
+                file_path, info = rss_manager.download_feed(overwrite=True)
+                console.print(f"[green]✓ Feed updated successfully[/green]")
+                console.print(f"  [cyan]Location:[/cyan] {file_path}")
+                console.print(f"  [cyan]Podcast:[/cyan] {info['podcast_title']}")
+                console.print(f"  [cyan]Episodes:[/cyan] {info['episode_count']}")
+                console.print(f"  [cyan]Size:[/cyan] {info['file_size_kb']:.1f} KB")
+                console.print()
+
+            except requests.RequestException as e:
+                console.print(f"[bold red]Error:[/bold red] Failed to update feed")
+                console.print(f"  {e}")
+                raise typer.Exit(1)
+
+        elif action == "list":
+            if not rss_manager.rss_feed_file.exists():
+                console.print("[bold red]Error:[/bold red] No local RSS feed found")
+                console.print(f"  Run: zk rss download")
+                raise typer.Exit(1)
+
+            try:
+                episodes = rss_manager.list_episodes()
+                console.print(f"\n[bold cyan]Episodes in RSS feed ({len(episodes)})[/bold cyan]\n")
+
+                for idx, ep in enumerate(episodes, 1):
+                    console.print(f"[bold]{idx}.[/bold] {ep['title']}")
+                    if ep['pub_date']:
+                        console.print(f"   [dim]{ep['pub_date']}[/dim]")
+                    if ep['duration']:
+                        console.print(f"   [cyan]Duration:[/cyan] {ep['duration']}")
+                console.print()
+
+            except Exception as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        elif action == "link":
+            if not episode_name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'link' action")
+                console.print("Usage: zk rss link \"Episode Name\"")
+                raise typer.Exit(1)
+
+            if not rss_manager.rss_feed_file.exists():
+                console.print("[bold red]Error:[/bold red] No local RSS feed found")
+                console.print("  Run: zk rss download")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Linking episode to RSS feed[/bold cyan]")
+            console.print(f"[dim]Episode: {episode_name}[/dim]\n")
+
+            try:
+                # Find matching episode in RSS feed
+                rss_episode = rss_manager.find_matching_episode(episode_name)
+                if not rss_episode:
+                    console.print(f"[bold red]Error:[/bold red] No matching episode found in RSS feed")
+                    console.print(f"  Searched for: {episode_name}")
+                    raise typer.Exit(1)
+
+                # Find episode directory
+                episode_path = config.find_episode_path(episode_name)
+                if not episode_path:
+                    console.print(f"[bold red]Error:[/bold red] Episode directory not found")
+                    console.print(f"  Searched for: {episode_name}")
+                    raise typer.Exit(1)
+
+                # Read current index.md
+                index_file = episode_path / "index.md"
+                if not index_file.exists():
+                    console.print(f"[bold red]Error:[/bold red] index.md not found in episode directory")
+                    raise typer.Exit(1)
+
+                # Parse YAML frontmatter
+                import yaml
+                content = index_file.read_text(encoding='utf-8')
+                parts = content.split('---')
+                if len(parts) < 3:
+                    console.print(f"[bold red]Error:[/bold red] Invalid frontmatter in index.md")
+                    raise typer.Exit(1)
+
+                frontmatter_str = parts[1]
+                body = '---'.join(parts[2:])
+                frontmatter = yaml.safe_load(frontmatter_str) or {}
+
+                # Add RSS metadata
+                frontmatter['rss_title'] = rss_episode['title']
+                frontmatter['rss_description'] = rss_episode['description'][:500]  # Truncate long descriptions
+                frontmatter['rss_date'] = rss_episode['pub_date']
+
+                # Write back updated frontmatter
+                new_frontmatter = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
+                updated_content = f"---\n{new_frontmatter}---{body}"
+                index_file.write_text(updated_content, encoding='utf-8')
+
+                console.print(f"[green]✓ Episode linked successfully[/green]")
+                console.print(f"  [cyan]Episode:[/cyan] {rss_episode['title']}")
+                console.print(f"  [cyan]Published:[/cyan] {rss_episode['pub_date']}")
+                console.print(f"  [cyan]Updated:[/cyan] {index_file}")
+                console.print()
+
+            except Exception as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        elif action == "sync-all":
+            if not rss_manager.rss_feed_file.exists():
+                console.print("[bold red]Error:[/bold red] No local RSS feed found")
+                console.print("  Run: zk rss download")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Syncing all episodes with RSS feed[/bold cyan]\n")
+
+            try:
+                from zettelkasten.utils.episode_manager import EpisodeManager
+                import yaml
+
+                episode_manager = EpisodeManager(config)
+                episodes = episode_manager.list_episodes()
+
+                if not episodes:
+                    console.print("[yellow]No episodes found to sync[/yellow]")
+                    raise typer.Exit(0)
+
+                linked_count = 0
+                rss_generated_count = 0
+                failed_episodes = []
+
+                for episode_name in episodes:
+                    try:
+                        # Try to link to RSS
+                        rss_episode = rss_manager.find_matching_episode(episode_name)
+                        episode_path = config.find_episode_path(episode_name)
+
+                        if rss_episode and episode_path:
+                            index_file = episode_path / "index.md"
+                            if index_file.exists():
+                                # Link RSS data
+                                content = index_file.read_text(encoding='utf-8')
+                                parts = content.split('---')
+                                if len(parts) >= 3:
+                                    frontmatter_str = parts[1]
+                                    body = '---'.join(parts[2:])
+                                    frontmatter = yaml.safe_load(frontmatter_str) or {}
+
+                                    frontmatter['rss_title'] = rss_episode['title']
+                                    frontmatter['rss_description'] = rss_episode['description'][:500]
+                                    frontmatter['rss_date'] = rss_episode['pub_date']
+
+                                    new_frontmatter = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
+                                    updated_content = f"---\n{new_frontmatter}---{body}"
+                                    index_file.write_text(updated_content, encoding='utf-8')
+
+                                    linked_count += 1
+
+                                    # Generate episode.rss
+                                    output_path = episode_path / "episode.rss"
+                                    rss_manager.create_episode_rss(rss_episode, output_path)
+                                    rss_generated_count += 1
+
+                    except Exception as e:
+                        failed_episodes.append((episode_name, str(e)))
+
+                console.print(f"[green]✓ Sync complete[/green]")
+                console.print(f"  [cyan]Linked:[/cyan] {linked_count} episodes")
+                console.print(f"  [cyan]RSS files generated:[/cyan] {rss_generated_count}")
+
+                if failed_episodes:
+                    console.print(f"\n[yellow]⚠ {len(failed_episodes)} episodes failed:[/yellow]")
+                    for name, error in failed_episodes:
+                        console.print(f"  [dim]{name}: {error}[/dim]")
+
+                console.print()
+
+            except Exception as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        elif action == "generate-episode-rss":
+            if not episode_name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'generate-episode-rss' action")
+                console.print("Usage: zk rss generate-episode-rss \"Episode Name\"")
+                raise typer.Exit(1)
+
+            if not rss_manager.rss_feed_file.exists():
+                console.print("[bold red]Error:[/bold red] No local RSS feed found")
+                console.print("  Run: zk rss download")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Generating episode RSS file[/bold cyan]")
+            console.print(f"[dim]Episode: {episode_name}[/dim]\n")
+
+            try:
+                # Find matching episode in RSS feed
+                rss_episode = rss_manager.find_matching_episode(episode_name)
+                if not rss_episode:
+                    console.print(f"[bold red]Error:[/bold red] No matching episode found in RSS feed")
+                    console.print(f"  Searched for: {episode_name}")
+                    raise typer.Exit(1)
+
+                # Find episode directory
+                episode_path = config.find_episode_path(episode_name)
+                if not episode_path:
+                    console.print(f"[bold red]Error:[/bold red] Episode directory not found")
+                    console.print(f"  Searched for: {episode_name}")
+                    raise typer.Exit(1)
+
+                # Use override title if provided
+                if rss_title:
+                    rss_episode['title'] = rss_title
+
+                # Generate episode.rss file
+                output_path = episode_path / "episode.rss"
+                rss_manager.create_episode_rss(rss_episode, output_path)
+
+                console.print(f"[green]✓ Episode RSS file generated[/green]")
+                console.print(f"  [cyan]Title:[/cyan] {rss_episode['title']}")
+                console.print(f"  [cyan]File:[/cyan] {output_path}")
+                console.print(f"  [cyan]Size:[/cyan] {output_path.stat().st_size} bytes")
+                console.print()
+
+            except Exception as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        else:
+            console.print(f"[bold red]Error:[/bold red] Unknown action '{action}'")
+            console.print("\nSupported actions: status, download, update, list, link, generate-episode-rss, sync-all")
+            raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def episode(
+    action: str = typer.Argument(
+        "list",
+        help="Action: new, list, show, import, or remove",
+    ),
+    name: Optional[str] = typer.Argument(
+        None,
+        help="Episode name (guest name or title for 'new' and 'show' actions)",
+    ),
+    title: Optional[str] = typer.Option(
+        None,
+        "--title",
+        "-t",
+        help="Episode title (defaults to guest name)",
+    ),
+    episode_number: Optional[int] = typer.Option(
+        None,
+        "--number",
+        "-n",
+        help="Episode number",
+    ),
+    summary: Optional[str] = typer.Option(
+        None,
+        "--summary",
+        "-s",
+        help="Brief episode summary",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force removal without confirmation (for 'remove' action)",
+    ),
+) -> None:
+    """
+    Manage podcast episodes.
+
+    Create new episode directories with all necessary files and templates,
+    list existing episodes, show details of a specific episode, import
+    existing episode directories, or remove episodes from the index.
+
+    Examples:
+        zk episode new "Amanda Wild" --title "Leadership" --number 42
+        zk episode list
+        zk episode show "Amanda Wild"
+        zk episode import "Grant Harris"
+        zk episode remove "Anna Gradie"
+        zk episode remove "Anna Gradie" --force
+    """
+    try:
+        from zettelkasten.core.models import Episode
+        from zettelkasten.utils.episode_manager import EpisodeManager
+
+        config = Config.from_env()
+        episode_manager = EpisodeManager(config)
+
+        if action == "new":
+            if not name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'new' action")
+                console.print("Usage: zk episode new \"Guest Name\" [--title TITLE] [--number NUM]")
+                raise typer.Exit(1)
+
+            # Create Episode model
+            episode_model = Episode(
+                title=title or name,
+                guest_name=name,
+                episode_number=episode_number,
+                summary=summary,
+            )
+
+            # Create episode directory
+            console.print(f"\n[bold cyan]Creating episode:[/bold cyan] {episode_model.title}")
+            if episode_model.guest_name:
+                console.print(f"[dim]Guest: {episode_model.guest_name}[/dim]")
+            console.print()
+
+            try:
+                episode_dir = episode_manager.create_episode_directory(episode_model)
+                console.print(f"[bold green]✓ Created episode directory:[/bold green]")
+                console.print(f"  [cyan]{episode_dir}[/cyan]")
+                console.print()
+
+                # List created files
+                console.print("[bold]Created files:[/bold]")
+                console.print(f"  [green]→[/green] index.md")
+                if episode_model.prep_transcript:
+                    console.print(f"  [green]→[/green] {episode_model.prep_transcript}")
+                if episode_model.interview_questions:
+                    console.print(f"  [green]→[/green] {episode_model.interview_questions}")
+                if episode_model.rss_description:
+                    console.print(f"  [green]→[/green] {episode_model.rss_description}")
+                if episode_model.youtube_description:
+                    console.print(f"  [green]→[/green] {episode_model.youtube_description}")
+                if episode_model.substack_description:
+                    console.print(f"  [green]→[/green] {episode_model.substack_description}")
+                console.print(f"  [green]→[/green] promos/")
+                console.print()
+
+                console.print("[yellow]Next steps:[/yellow]")
+                console.print(f"  1. Edit the episode files in: {episode_dir}")
+                console.print(f"  2. Add media files (video, audio, transcripts) to the episode directory")
+                console.print(f"  3. Update index.md with production details")
+
+            except ValueError as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        elif action == "list":
+            episodes = episode_manager.list_episodes()
+
+            if not episodes:
+                console.print("[yellow]No episodes found.[/yellow]")
+                console.print("\n[dim]Create a new episode with:[/dim]")
+                console.print("[dim]  zk episode new \"Guest Name\"[/dim]")
+                return
+
+            console.print(f"\n[bold cyan]Episodes ({len(episodes)}):[/bold cyan]\n")
+            for ep in episodes:
+                console.print(f"  [green]→[/green] {ep}")
+            console.print()
+
+        elif action == "show":
+            if not name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'show' action")
+                console.print("Usage: zk episode show \"Episode Name\"")
+                raise typer.Exit(1)
+
+            episode_dir = config.get_episode_dir(name)
+            if not episode_dir.exists():
+                console.print(f"[bold red]Error:[/bold red] Episode '{name}' not found")
+                console.print("\nRun 'zk episode list' to see all episodes")
+                raise typer.Exit(1)
+
+            # Show episode directory contents
+            console.print(f"\n[bold cyan]Episode:[/bold cyan] {name}")
+            console.print(f"[dim]{episode_dir}[/dim]\n")
+
+            console.print("[bold]Files:[/bold]")
+            for file in sorted(episode_dir.rglob("*")):
+                if file.is_file():
+                    rel_path = file.relative_to(episode_dir)
+                    console.print(f"  [green]→[/green] {rel_path}")
+            console.print()
+
+        elif action == "import":
+            if not name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'import' action")
+                console.print("Usage: zk episode import \"Episode Directory Name\"")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Importing episode:[/bold cyan] {name}")
+            console.print(f"[dim]Scanning directory for files...[/dim]\n")
+
+            try:
+                episode_dir, episode, file_mapping = episode_manager.import_existing_episode(
+                    name,
+                    episode_number=episode_number
+                )
+
+                console.print(f"[bold green]✓ Successfully imported episode![/bold green]")
+                console.print(f"  [cyan]{episode_dir}[/cyan]\n")
+
+                # Show detected files
+                console.print("[bold]Detected files:[/bold]")
+                if episode.episode_number:
+                    console.print(f"  [yellow]Episode Number:[/yellow] {episode.episode_number}")
+
+                if file_mapping['video']:
+                    size_mb = file_mapping['video'].stat().st_size / (1024 * 1024)
+                    console.print(f"  [green]→[/green] Video: {file_mapping['video'].name} ({size_mb:.1f} MB)")
+
+                if file_mapping['audio']:
+                    size_mb = file_mapping['audio'].stat().st_size / (1024 * 1024)
+                    console.print(f"  [green]→[/green] Audio: {file_mapping['audio'].name} ({size_mb:.1f} MB)")
+
+                if file_mapping['transcript']:
+                    console.print(f"  [green]→[/green] Transcript: {file_mapping['transcript'].name}")
+
+                if file_mapping['promos']:
+                    console.print(f"  [green]→[/green] Promos: {len(file_mapping['promos'])} image(s) moved to promos/")
+
+                console.print()
+                console.print("[bold]Created files:[/bold]")
+                console.print(f"  [green]→[/green] index.md")
+                console.print(f"  [green]→[/green] prep conversation transcript.txt")
+                console.print(f"  [green]→[/green] interview questions.md")
+                console.print(f"  [green]→[/green] RSS description.md")
+                console.print(f"  [green]→[/green] YouTube description.md")
+                console.print(f"  [green]→[/green] Substack description.md")
+                console.print()
+
+                # Check if RSS data was linked
+                try:
+                    from zettelkasten.utils.rss_manager import RSSManager
+                    rss_manager = RSSManager(config)
+                    if rss_manager.rss_feed_file.exists():
+                        rss_episode = rss_manager.find_matching_episode(name)
+                        if rss_episode:
+                            console.print("[bold green]✓ RSS feed data linked:[/bold green]")
+                            console.print(f"  [cyan]Title:[/cyan] {rss_episode['title']}")
+                            console.print(f"  [cyan]Published:[/cyan] {rss_episode['pub_date']}")
+                            console.print()
+                except Exception:
+                    pass
+
+                console.print("[yellow]Next steps:[/yellow]")
+                console.print(f"  1. Review index.md and update episode metadata")
+                console.print(f"  2. Fill in the description templates (RSS, YouTube, Substack)")
+                console.print(f"  3. Add interview questions to interview questions.md")
+
+                # Rebuild indices to include the new episode
+                console.print()
+                console.print("[dim]Rebuilding indices...[/dim]")
+                from zettelkasten.generators.index_generator import IndexGenerator
+                index_gen = IndexGenerator(config)
+                index_gen.rebuild_indices()
+                console.print("[green]✓ Indices updated[/green]")
+
+            except ValueError as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        elif action == "remove":
+            if not name:
+                console.print("[bold red]Error:[/bold red] Episode name required for 'remove' action")
+                console.print("Usage: zk episode remove \"Episode Name\" [--force]")
+                raise typer.Exit(1)
+
+            console.print(f"\n[bold cyan]Removing episode from index:[/bold cyan] {name}")
+
+            try:
+                # Find episode directory
+                episode_path = config.find_episode_path(name)
+                if not episode_path:
+                    console.print(f"[bold red]Error:[/bold red] Episode '{name}' not found")
+                    raise typer.Exit(1)
+
+                index_file = episode_path / "index.md"
+                if not index_file.exists():
+                    console.print(f"[bold red]Error:[/bold red] index.md not found in episode directory")
+                    console.print(f"  Path: {episode_path}")
+                    raise typer.Exit(1)
+
+                # Show what will be deleted
+                console.print(f"[dim]Episode path: {episode_path}[/dim]")
+                console.print(f"[dim]Will delete: {index_file}[/dim]\n")
+
+                # Confirm deletion
+                if not force:
+                    console.print("[yellow]⚠ This will remove the episode from the index[/yellow]")
+                    console.print("[yellow]The episode directory and other files will remain unchanged[/yellow]")
+                    confirm = typer.confirm("Are you sure you want to remove this episode from the index?")
+                    if not confirm:
+                        console.print("[dim]Cancelled[/dim]")
+                        raise typer.Exit(0)
+
+                # Delete the index file
+                index_file.unlink()
+                console.print(f"[green]✓ Episode removed from index[/green]")
+                console.print(f"  [dim]{index_file}[/dim]\n")
+
+                # Rebuild indices
+                console.print("[dim]Rebuilding indices...[/dim]")
+                from zettelkasten.generators.index_generator import IndexGenerator
+                index_gen = IndexGenerator(config)
+                index_gen.rebuild_indices()
+                console.print("[green]✓ Indices updated[/green]")
+                console.print()
+
+            except ValueError as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+            except Exception as e:
+                console.print(f"[bold red]Error:[/bold red] {e}")
+                raise typer.Exit(1)
+
+        else:
+            console.print(f"[bold red]Error:[/bold red] Unknown action '{action}'")
+            console.print("\nSupported actions: new, list, show, import, remove")
+            raise typer.Exit(1)
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def generate_questions(
+    guest_name: str = typer.Argument(
+        ...,
+        help="Name of the guest/interviewee",
+    ),
+    transcript_path: Optional[str] = typer.Option(
+        None,
+        "--transcript",
+        "-t",
+        help="Path to the prep conversation transcript (optional)",
+    ),
+    background: Optional[str] = typer.Option(
+        None,
+        "--background",
+        "-b",
+        help="Guest background information (optional)",
+    ),
+    key_topics: Optional[str] = typer.Option(
+        None,
+        "--topics",
+        "-k",
+        help="Key topics to discuss (optional)",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output file path (optional, will save questions to file)",
+    ),
+) -> None:
+    """
+    Generate interview questions for a podcast episode using Claude AI.
+
+    Analyzes the guest's background and creates thoughtful interview questions
+    based on the podcast's theme and SEO keywords.
+
+    Examples:
+        zk generate-questions "Guest Name"
+        zk generate-questions "Guest Name" --transcript path/to/prep-transcript.txt
+        zk generate-questions "Guest Name" --background "Background info" --topics "Topic 1, Topic 2"
+        zk generate-questions "Guest Name" --output interview-questions.md
+    """
+    try:
+        from zettelkasten.utils.interview_generator import InterviewQuestionGenerator
+
+        config = Config.from_env()
+        generator = InterviewQuestionGenerator(config)
+
+        console.print(f"\n[bold cyan]Generating interview questions for:[/bold cyan] {guest_name}")
+        console.print()
+
+        # Find the prep transcript file
+        transcript_file = None
+        if transcript_path:
+            # User provided explicit path
+            transcript_file = Path(transcript_path)
+            if not transcript_file.exists():
+                console.print(f"[bold red]Error:[/bold red] Transcript file not found: {transcript_path}")
+                raise typer.Exit(1)
+        else:
+            # Try to find prep transcript in episode directory
+            episode_path = config.find_episode_path(guest_name)
+            if not episode_path:
+                console.print(f"[bold red]Error:[/bold red] Episode directory not found for '{guest_name}'")
+                console.print("[dim]Use --transcript to specify the prep conversation transcript path[/dim]")
+                raise typer.Exit(1)
+
+            # Look for prep transcript file with common naming patterns
+            for potential_name in ["prep conversation transcript.txt", "prep conversation transcript.md", "prep-transcript.txt"]:
+                potential_file = episode_path / potential_name
+                if potential_file.exists():
+                    transcript_file = potential_file
+                    break
+
+            # Also check for any file matching pattern like "*pre*.txt" or "*prep*.txt"
+            if not transcript_file:
+                import glob
+                for pattern in ["*pre*.txt", "*pre*.md", "*prep*.txt", "*prep*.md"]:
+                    matches = list(episode_path.glob(pattern))
+                    if matches:
+                        transcript_file = matches[0]
+                        break
+
+        # Require transcript
+        if not transcript_file or not transcript_file.exists():
+            console.print(f"[bold red]Error:[/bold red] Prep conversation transcript not found for '{guest_name}'")
+            console.print("[dim]Expected one of these files in the episode directory:[/dim]")
+            console.print("[dim]  - prep conversation transcript.txt[/dim]")
+            console.print("[dim]  - prep-transcript.txt[/dim]")
+            console.print("[dim]  - Any file matching *pre*.txt or *prep*.txt[/dim]")
+            console.print("[dim]Or use --transcript to specify the path explicitly[/dim]")
+            raise typer.Exit(1)
+
+        console.print(f"[dim]Using transcript: {transcript_file}[/dim]")
+        console.print("[dim]Analyzing transcript and generating questions with Claude...[/dim]")
+        console.print()
+
+        questions = generator.generate_questions(
+            guest_name=guest_name,
+            transcript_path=transcript_file,
+            background=background,
+            key_topics=key_topics,
+        )
+
+        # Display the questions
+        console.print(questions)
+        console.print()
+
+        # Determine where to save
+        save_path = None
+
+        # If output path specified, use that
+        if output:
+            save_path = Path(output)
+        else:
+            # Try to find episode directory and save there
+            episode_path = config.find_episode_path(guest_name)
+            if episode_path:
+                save_path = episode_path / "interview questions.md"
+
+        # Save to file if path determined
+        if save_path:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            generator.save_questions(questions, save_path)
+            console.print(f"[bold green]✓ Questions saved to:[/bold green] {save_path}")
+            console.print()
+        else:
+            console.print("[dim]Tip: Use --output to save questions to a file[/dim]")
+            console.print()
+
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)

@@ -13,15 +13,15 @@
 
     <div class="staging-actions">
         <form method="post" action="/staging/approve/{{ file_path }}" style="display: inline;" id="approveForm">
-            <button type="submit" class="btn btn-primary" id="approveBtn">
+            <button type="submit" class="btn-small btn-action" id="approveBtn">
                 <span id="approveBtnText">✓ Approve</span>
                 <span id="approveBtnLoading" style="display: none;">⏳ Approving...</span>
             </button>
         </form>
-        <a href="/staging/edit/{{ file_path }}" class="btn btn-secondary" id="editBtn">
+        <a href="/staging/edit/{{ file_path }}" class="btn-small btn-action" id="editBtn">
             ✏️ Edit
         </a>
-        <button class="btn btn-danger" id="deleteBtn" onclick="confirmDelete('{{ file_path }}')">
+        <button class="btn-small btn-action" id="deleteBtn" onclick="confirmDelete('{{ file_path }}')">
             🗑️ Delete
         </button>
     </div>

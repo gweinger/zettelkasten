@@ -23,6 +23,8 @@ class NoteContentGenerator:
         title: str,
         backlink_sources: List[Dict] = None,
         auto_fill: bool = False,
+        user_description: Optional[str] = None,
+        reference_urls: Optional[List[str]] = None,
     ) -> List[str]:
         """
         Generate complete content for a concept note.
@@ -37,6 +39,8 @@ class NoteContentGenerator:
             backlink_sources: List of dicts with 'title' and 'relative_path' for
                             notes that reference this concept
             auto_fill: If True, generate description from Claude
+            user_description: Optional user-provided description/context
+            reference_urls: Optional list of URLs for Claude to fetch and use as context
 
         Returns:
             List of markdown lines for the note content
@@ -45,14 +49,26 @@ class NoteContentGenerator:
 
         # Add description
         if auto_fill:
-            description = self._generate_summary(title)
+            # Generate summary using Claude with context
+            description = self._generate_summary(title, user_description, reference_urls)
             lines.append(description)
+            lines.append("")
+
+            # Also add user's original description if provided
+            if user_description and user_description.strip():
+                lines.append("## User Notes")
+                lines.append("")
+                lines.append(user_description.strip())
+                lines.append("")
+        elif user_description:
+            # Use user-provided description without auto-fill
+            lines.append(user_description.strip())
+            lines.append("")
         else:
             lines.append("## Description")
             lines.append("")
             lines.append("<!-- Add your notes here -->")
-
-        lines.append("")
+            lines.append("")
 
         # Add Key Quotes section
         lines.append("## Key Quotes")
@@ -63,8 +79,17 @@ class NoteContentGenerator:
         # Add Sources section
         lines.append("## Sources")
         lines.append("")
-        lines.append("<!-- Link to source notes here -->")
-        lines.append("")
+
+        # Add reference URLs if provided
+        if reference_urls:
+            for url in reference_urls:
+                if url.strip():
+                    lines.append(f"- {url.strip()}")
+            lines.append("")
+
+        if not reference_urls:
+            lines.append("<!-- Link to source notes here -->")
+            lines.append("")
 
         # Add Related Notes section
         lines.append("## Related Notes")
@@ -136,6 +161,8 @@ class NoteContentGenerator:
         title: str,
         auto_fill: bool = False,
         research_data: Optional[Dict] = None,
+        user_description: Optional[str] = None,
+        reference_urls: Optional[List[str]] = None,
     ) -> List[str]:
         """
         Generate content for a person/contact note.
@@ -151,17 +178,37 @@ class NoteContentGenerator:
 
         Args:
             title: Name of the person
-            auto_fill: If True, include research data
-            research_data: Pre-populated research data dictionary
+            auto_fill: If True, generate professional summary using Claude
+            research_data: Pre-populated research data dictionary (legacy)
+            user_description: Optional user-provided description/context
+            reference_urls: Optional list of URLs to fetch for context
 
         Returns:
             List of markdown lines for the note content
         """
         lines = []
 
-        # Add summary if available from research
-        if auto_fill and research_data and research_data.get('summary'):
-            lines.append(research_data['summary'])
+        # Generate professional summary using Claude if auto_fill enabled
+        if auto_fill:
+            if research_data and research_data.get('summary'):
+                # Legacy: use pre-populated research data
+                lines.append(research_data['summary'])
+                lines.append('')
+            else:
+                # New: Generate summary using Claude with URL context
+                summary = self._generate_person_summary(title, user_description, reference_urls)
+                lines.append(summary)
+                lines.append('')
+
+            # Also add user's original description if provided
+            if user_description and user_description.strip():
+                lines.append('## User Notes')
+                lines.append('')
+                lines.append(user_description.strip())
+                lines.append('')
+        elif user_description:
+            # Use user-provided description without auto-fill
+            lines.append(user_description.strip())
             lines.append('')
         else:
             lines.append('## Professional Summary')
@@ -211,8 +258,17 @@ class NoteContentGenerator:
         # Add Sources section
         lines.append('## Sources')
         lines.append('')
-        lines.append('<!-- Link to source notes here -->')
-        lines.append('')
+
+        # Add reference URLs if provided
+        if reference_urls:
+            for url in reference_urls:
+                if url.strip():
+                    lines.append(f'- {url.strip()}')
+            lines.append('')
+
+        if not reference_urls:
+            lines.append('<!-- Link to source notes here -->')
+            lines.append('')
 
         # Add Related Notes section
         lines.append('## Related Notes')
@@ -222,29 +278,108 @@ class NoteContentGenerator:
 
         return lines
 
-    def _generate_summary(self, concept_name: str) -> str:
+    def _generate_summary(
+        self,
+        concept_name: str,
+        user_description: Optional[str] = None,
+        reference_urls: Optional[List[str]] = None,
+    ) -> str:
         """
         Generate a summary of a concept using Claude.
 
         Args:
             concept_name: Name of the concept to summarize
+            user_description: Optional user-provided context/description
+            reference_urls: Optional list of URLs to fetch and use as context
 
         Returns:
             Generated summary text
         """
-        prompt = f"""Generate a clear, concise description of the concept "{concept_name}" suitable for a personal knowledge base.
+        # Build the prompt with context
+        prompt_parts = [
+            f'Generate a clear, concise description of the concept "{concept_name}" suitable for a personal knowledge base.'
+        ]
 
+        # Add user description as context if provided
+        if user_description and user_description.strip():
+            prompt_parts.append(f"\nUser's context/notes:\n{user_description.strip()}")
+
+        # Add reference URLs if provided
+        if reference_urls and len(reference_urls) > 0:
+            prompt_parts.append("\nReference URLs to research (use WebFetch to gather context):")
+            for url in reference_urls:
+                if url.strip():
+                    prompt_parts.append(f"- {url.strip()}")
+
+        prompt_parts.append("""
 The description should:
-- Be 2-3 sentences
+- Be 2-3 sentences (or more if URLs provided detailed information)
 - Explain what the concept is and why it's important
 - Be written in a way that helps build understanding
 - Be actionable and practical where possible
+- Incorporate information from the user's context and reference URLs if provided
 
-Return only the description text, no JSON or formatting."""
+Return only the description text, no JSON or formatting.""")
+
+        prompt = "\n".join(prompt_parts)
 
         response = self.concept_extractor.client.messages.create(
             model="claude-3-haiku-20240307",
-            max_tokens=512,
+            max_tokens=1024,
+            temperature=0.5,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        return response.content[0].text.strip()
+
+    def _generate_person_summary(
+        self,
+        person_name: str,
+        user_description: Optional[str] = None,
+        reference_urls: Optional[List[str]] = None,
+    ) -> str:
+        """
+        Generate a professional summary for a person using Claude.
+
+        Args:
+            person_name: Name of the person
+            user_description: Optional user-provided context/description
+            reference_urls: Optional list of URLs to fetch and use as context
+
+        Returns:
+            Generated professional summary text
+        """
+        # Build the prompt with context
+        prompt_parts = [
+            f'Generate a professional summary for {person_name} suitable for a personal knowledge base / contact management system.'
+        ]
+
+        # Add user description as context if provided
+        if user_description and user_description.strip():
+            prompt_parts.append(f"\nUser's context/notes:\n{user_description.strip()}")
+
+        # Add reference URLs if provided
+        if reference_urls and len(reference_urls) > 0:
+            prompt_parts.append("\nReference URLs to research (use WebFetch to gather context):")
+            for url in reference_urls:
+                if url.strip():
+                    prompt_parts.append(f"- {url.strip()}")
+
+        prompt_parts.append("""
+The summary should:
+- Be 2-4 sentences (or more if URLs provided detailed information)
+- Include their professional background, expertise, or notable work
+- Mention any relevant affiliations, companies, or projects
+- Be factual and informative
+- Incorporate information from the user's context and reference URLs if provided
+
+Return only the professional summary text, no JSON or formatting.""")
+
+        prompt = "\n".join(prompt_parts)
+
+        response = self.concept_extractor.client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=1024,
             temperature=0.5,
             messages=[{"role": "user", "content": prompt}],
         )

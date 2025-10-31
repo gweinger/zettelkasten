@@ -9,6 +9,12 @@
 
     <div class="stats-grid">
         <div class="stat-card">
+            <h3>📻 Episodes</h3>
+            <div class="stat-number">{{ stats.total_episodes }}</div>
+            <a href="/episodes" class="stat-link">Manage →</a>
+        </div>
+
+        <div class="stat-card">
             <h3>📝 Concepts</h3>
             <div class="stat-number">{{ stats.total_concepts }}</div>
             <a href="/indexes/concepts" class="stat-link">Browse →</a>
@@ -36,13 +42,13 @@
     <div class="actions-section">
         <h2>Quick Actions</h2>
         <div class="action-buttons">
-            <a href="/add-url" class="btn btn-primary">
+            <a href="/add-url" class="btn-small">
                 🌐 Add from URL
             </a>
-            <button class="btn btn-secondary" onclick="alert('Coming soon: Create Note')">
+            <a href="/create-note" class="btn-small">
                 ✏️ Create Note
-            </button>
-            <button class="btn btn-secondary" onclick="alert('Coming soon: Search')">
+            </a>
+            <button class="btn-small" onclick="alert('Coming soon: Search')">
                 🔍 Search
             </button>
         </div>

@@ -25,6 +25,7 @@ dependencies = [
     "jinja2>=3.1.0",
     "markdown>=3.5.0",
     "python-multipart>=0.0.6",
+    "itsdangerous>=2.0.0",
 ]
 
 [project.optional-dependencies]

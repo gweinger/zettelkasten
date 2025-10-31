@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Episodes - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="episodes-container">
+    <div class="episodes-header">
+        <h1>📻 Episodes</h1>
+        <p class="subtitle">Manage and import podcast episodes</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="alert alert-success">
+        {{ success }}
+    </div>
+    {% endif %}
+
+    <div class="episodes-stats">
+        <div class="stat-box">
+            <div class="stat-label">Total Episodes</div>
+            <div class="stat-value">{{ stats.total_episodes }}</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Published</div>
+            <div class="stat-value">{{ stats.published_episodes }}</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Planning</div>
+            <div class="stat-value">{{ stats.planning_episodes }}</div>
+        </div>
+    </div>
+
+    <div class="import-section">
+        <h2>Import Episode</h2>
+        <p class="subtitle">Add an existing episode directory to your vault</p>
+
+        <form method="POST" action="/episodes/import" class="import-form">
+            <div class="form-group">
+                <label for="episode_dir">Episode Directory Name</label>
+                <input
+                    type="text"
+                    id="episode_dir"
+                    name="episode_dir"
+                    required
+                    placeholder="e.g., Diane Taylor"
+                    autofocus
+                >
+                <div class="form-help">
+                    The name of the episode directory you want to import (from ADDITIONAL_EPISODE_DIRS)
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="episode_number">Episode Number (Optional)</label>
+                <input
+                    type="number"
+                    id="episode_number"
+                    name="episode_number"
+                    min="1"
+                    placeholder="Leave blank to auto-detect or use 999"
+                >
+                <div class="form-help">
+                    If not provided, will try to extract from filename or default to 999 (which you can update later)
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-small">Import Episode</button>
+                <a href="/" class="btn-small">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    {% if episodes %}
+    <div class="episodes-list">
+        <h2>Episodes ({{ episodes|length }})</h2>
+
+        <table class="episodes-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Guest</th>
+                    <th>Status</th>
+                    <th>Media</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for episode in episodes %}
+                <tr class="episode-row">
+                    <td class="ep-number">{{ episode.episode_number }}</td>
+                    <td class="ep-title">
+                        <a href="/note/episodes/{{ episode.directory_name }}/index">
+                            {{ episode.title }}
+                        </a>
+                    </td>
+                    <td class="ep-guest">{{ episode.guest_name or '—' }}</td>
+                    <td class="ep-status">
+                        <span class="status-badge status-{{ episode.status }}">{{ episode.status }}</span>
+                    </td>
+                    <td class="ep-media">
+                        {% if episode.podcast_audio %}
+                        <span class="metadata-tag">🎙️</span>
+                        {% endif %}
+                        {% if episode.podcast_video %}
+                        <span class="metadata-tag">📹</span>
+                        {% endif %}
+                        {% if episode.podcast_transcript %}
+                        <span class="metadata-tag">📝</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>📚</p>
+        <p>No episodes yet. Import your first episode to get started!</p>
+    </div>
+    {% endif %}
+
+    <div class="info-section">
+        <h2>About Episodes</h2>
+        <ul>
+            <li>Episodes are stored in your vault and indexed in the Sources index</li>
+            <li>Each episode gets an index.md with metadata</li>
+            <li>Audio, video, and transcript files are automatically detected and organized</li>
+            <li>Episode numbers help organize and reference episodes</li>
+            <li>Use number 999 as a placeholder while you finalize episode numbering</li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.episodes-container {
+    max-width: 1200px;
+}
+
+.episodes-header {
+    margin-bottom: 3rem;
+}
+
+.episodes-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.episodes-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 3rem;
+}
+
+.stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.import-section {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 2rem;
+    margin-bottom: 3rem;
+}
+
+.import-form {
+    margin-top: 1.5rem;
+}
+
+.episodes-list {
+    margin-bottom: 3rem;
+}
+
+.episodes-list h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.episodes-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.episodes-table thead {
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+}
+
+.episodes-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.episodes-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s;
+}
+
+.episodes-table tbody tr:hover {
+    background: var(--surface);
+}
+
+.episodes-table td {
+    padding: 1rem;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.episodes-table td a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.episodes-table td a:hover {
+    text-decoration: underline;
+}
+
+.ep-number {
+    font-weight: 600;
+    width: 60px;
+}
+
+.ep-title {
+    flex: 1;
+}
+
+.ep-guest {
+    color: var(--text-muted);
+    width: 150px;
+}
+
+.ep-status {
+    width: 100px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.status-badge.status-published {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-badge.status-planning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-draft {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.ep-media {
+    width: 100px;
+}
+
+.metadata-tag {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    margin-right: 0.25rem;
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}

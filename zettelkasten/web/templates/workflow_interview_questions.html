@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Interview Questions - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="workflow-container">
+    <div class="workflow-header">
+        <h1>📝 Generate Interview Questions</h1>
+        <p class="subtitle">Create interview questions for podcast episodes using AI</p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="alert alert-success">
+        {{ success }}
+        {% if questions_file %}
+        <p style="margin-top: 0.5rem;"><a href="/note/episodes/{{ episode_name }}/index" style="color: inherit; text-decoration: underline;">View episode →</a></p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="workflow-content">
+        <div class="workflow-section">
+            <h2>Generate Questions for an Episode</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+                Select an episode to generate interview questions. The system will analyze the prep conversation transcript and create structured interview questions with an introduction script.
+            </p>
+
+            <form method="POST" action="/workflows/interview-questions" class="workflow-form">
+                <div class="form-group">
+                    <label for="guest_name">Episode / Guest Name</label>
+                    <input
+                        type="text"
+                        id="guest_name"
+                        name="guest_name"
+                        required
+                        placeholder="e.g., Matthew Spaur, Diane Taylor"
+                        autofocus
+                    >
+                    <div class="form-help">
+                        Enter the episode directory name or guest name
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-small">✨ Generate Questions</button>
+                    <a href="/episodes" class="btn-small">Cancel</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="workflow-section">
+            <h2>How It Works</h2>
+            <ol style="margin-left: 1.5rem; color: var(--text-muted);">
+                <li style="margin-bottom: 1rem;"><strong>Episode Directory</strong> - System finds your episode folder (e.g., Matthew Spaur)</li>
+                <li style="margin-bottom: 1rem;"><strong>Transcript Analysis</strong> - Reads the prep conversation transcript to understand context</li>
+                <li style="margin-bottom: 1rem;"><strong>AI Generation</strong> - Claude generates relevant questions based on actual conversation content</li>
+                <li style="margin-bottom: 1rem;"><strong>Auto-Save</strong> - Questions are automatically saved to <code>interview questions.md</code> in the episode folder</li>
+            </ol>
+        </div>
+
+        <div class="workflow-section">
+            <h2>Output Format</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                Generated questions include:
+            </p>
+            <ul style="margin-left: 1.5rem; color: var(--text-muted);">
+                <li><strong>Introduction Script</strong> - A podcast-ready intro you can read on air</li>
+                <li><strong>Opening Questions (2-3)</strong> - Build rapport and ease into conversation</li>
+                <li><strong>Main Discussion (6-8)</strong> - Deep dive into guest's expertise and experience</li>
+                <li><strong>Closing Questions (2-3)</strong> - Reflections, insights, and forward-looking questions</li>
+            </ul>
+        </div>
+
+        <div class="workflow-section">
+            <h2>Requirements</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                Your episode directory must contain a prep conversation transcript file. Common names:
+            </p>
+            <ul style="margin-left: 1.5rem; color: var(--text-muted);">
+                <li><code>prep conversation transcript.txt</code></li>
+                <li><code>prep-transcript.txt</code></li>
+                <li>Any file matching <code>*pre*.txt</code> or <code>*prep*.txt</code></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<style>
+.workflow-container {
+    max-width: 800px;
+}
+
+.workflow-header {
+    margin-bottom: 3rem;
+}
+
+.workflow-header h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.workflow-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.workflow-section {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+}
+
+.workflow-section h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+}
+
+.workflow-form {
+    margin-top: 1rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.form-help {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+code {
+    background: var(--surface);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}

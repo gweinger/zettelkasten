@@ -228,9 +228,6 @@ class IndexGenerator:
         # Exclude the index file itself
         note_files = [f for f in note_files if f.stem.upper() != "INDEX"]
 
-        if not note_files:
-            return None
-
         # Parse all notes
         notes = []
         for filepath in note_files:
@@ -248,6 +245,9 @@ class IndexGenerator:
         for group in grouped_notes.values():
             group.sort(key=lambda n: n.title.lower())
 
+        # Get episodes
+        episodes = self._get_episodes()
+
         # Generate markdown content
         lines = []
         lines.append("---")
@@ -258,20 +258,40 @@ class IndexGenerator:
         lines.append("")
         lines.append("# Source Index")
         lines.append("")
-        lines.append(f"*{len(notes)} sources*")
+        total_sources = len(notes) + len(episodes)
+        lines.append(f"*{total_sources} sources*")
         lines.append("")
 
         # Define order and display names for content types
         type_order = [
             (ContentType.YOUTUBE.value, "YouTube Videos"),
             (ContentType.ARTICLE.value, "Articles"),
+            ("episodes", "Episodes"),  # Add Episodes after Articles
             (ContentType.PODCAST.value, "Podcasts"),
             ("other", "Other Sources"),
         ]
 
         # Add sections by content type
         for type_key, type_display in type_order:
-            if type_key in grouped_notes:
+            # Handle episodes specially
+            if type_key == "episodes":
+                if episodes:
+                    lines.append(f"## {type_display}")
+                    lines.append("")
+                    lines.append(f"*{len(episodes)} episodes*")
+                    lines.append("")
+                    for episode in episodes:
+                        title = episode['title']
+                        if episode.get('episode_number'):
+                            link_text = f"Episode {episode['episode_number']}: {title}"
+                        else:
+                            link_text = title
+
+                        # Use wikilink that will be resolved by the web app's find_episode_path
+                        # This works for episodes in any directory (main or additional)
+                        lines.append(f"- [[episodes/{episode['dir_name']}/index|{link_text}]]")
+                    lines.append("")
+            elif type_key in grouped_notes:
                 notes_in_group = grouped_notes[type_key]
                 lines.append(f"## {type_display}")
                 lines.append("")
@@ -377,6 +397,11 @@ class IndexGenerator:
 
                 if value:
                     # Regular key: value pair
+                    # Strip surrounding quotes from value if present
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
                     frontmatter[key] = value
                     current_key = None
                 else:
@@ -394,6 +419,57 @@ class IndexGenerator:
             frontmatter[current_key] = current_list
 
         return frontmatter
+
+    def _get_episodes(self) -> List[Dict]:
+        """
+        Get all episodes from all episode directories (main + additional).
+
+        Returns:
+            List of episode dictionaries with title, dir_name, episode_number, and full_path
+        """
+        episodes = []
+
+        # Search in all configured episode directories
+        for episodes_path in self.config.get_all_episode_dirs():
+            if not episodes_path.exists():
+                continue
+
+            # Find all episode directories with index.md
+            for episode_dir in episodes_path.iterdir():
+                if not episode_dir.is_dir():
+                    continue
+
+                index_file = episode_dir / "index.md"
+                if not index_file.exists():
+                    continue
+
+                # Parse the index.md frontmatter to get title and episode number
+                try:
+                    metadata = self._parse_note_metadata(index_file)
+                    if metadata:
+                        episode_info = {
+                            'title': metadata.title,
+                            'dir_name': episode_dir.name,
+                            'full_path': episode_dir,  # Store full path for link generation
+                        }
+
+                        # Try to extract episode number from frontmatter
+                        content = index_file.read_text()
+                        frontmatter = self._extract_frontmatter(content)
+                        if frontmatter and 'episode_number' in frontmatter:
+                            try:
+                                episode_info['episode_number'] = int(frontmatter['episode_number'])
+                            except (ValueError, TypeError):
+                                pass
+
+                        episodes.append(episode_info)
+                except Exception:
+                    continue
+
+        # Sort by episode number if available, then by title
+        episodes.sort(key=lambda e: (e.get('episode_number', 9999), e['title'].lower()))
+
+        return episodes
 
     def _extract_description(self, filepath: Path) -> Optional[str]:
         """

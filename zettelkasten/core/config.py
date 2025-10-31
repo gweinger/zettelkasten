@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Union
 import os
 from dotenv import load_dotenv
 
@@ -60,6 +60,18 @@ class Config(BaseModel):
         default=Path("./vault/sources/articles"),
         description="Path for saved article full text",
     )
+    episodes_path: Path = Field(
+        default=Path("./vault/sources/episodes"),
+        description="Path for podcast episodes",
+    )
+    additional_episode_dirs: list[Path] = Field(
+        default_factory=list,
+        description="Additional directories to search for episodes",
+    )
+    rss_feed_file: Path = Field(
+        default=Path("./vault/sources/podcast.rss"),
+        description="Path to store local RSS feed file",
+    )
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -89,6 +101,15 @@ class Config(BaseModel):
         # Get base sources path (sources/ contains summaries and materials)
         sources_base = vault_path / "sources"
 
+        # Parse additional episode directories
+        additional_dirs = []
+        additional_dirs_str = os.getenv("ADDITIONAL_EPISODE_DIRS", "")
+        if additional_dirs_str:
+            for dir_str in additional_dirs_str.split(","):
+                dir_str = dir_str.strip()
+                if dir_str:
+                    additional_dirs.append(Path(dir_str).expanduser())
+
         return cls(
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             whisper_model_size=os.getenv("WHISPER_MODEL_SIZE", "base"),
@@ -100,6 +121,9 @@ class Config(BaseModel):
             video_path=Path(os.getenv("VIDEO_PATH", str(sources_base / "video"))),
             transcripts_path=Path(os.getenv("TRANSCRIPTS_PATH", str(sources_base / "transcripts"))),
             articles_path=Path(os.getenv("ARTICLES_PATH", str(sources_base / "articles"))),
+            episodes_path=Path(os.getenv("EPISODES_PATH", str(sources_base / "episodes"))),
+            additional_episode_dirs=additional_dirs,
+            rss_feed_file=Path(os.getenv("RSS_FEED_FILE", str(sources_base / "podcast.rss"))),
         )
 
     def ensure_directories(self) -> None:
@@ -119,6 +143,7 @@ class Config(BaseModel):
         self.video_path.mkdir(parents=True, exist_ok=True)
         self.transcripts_path.mkdir(parents=True, exist_ok=True)
         self.articles_path.mkdir(parents=True, exist_ok=True)
+        self.episodes_path.mkdir(parents=True, exist_ok=True)
 
         # Create inbox subdirectories for classification
         (self.vault_path / "inbox" / "concepts").mkdir(parents=True, exist_ok=True)
@@ -151,3 +176,35 @@ class Config(BaseModel):
     def get_staging_path(self) -> Path:
         """Get path to staging directory."""
         return self.vault_path / "staging"
+
+    def get_episodes_path(self) -> Path:
+        """Get path to episodes directory."""
+        return self.episodes_path
+
+    def get_episode_dir(self, episode_name: str) -> Path:
+        """Get path to a specific episode directory."""
+        return self.episodes_path / episode_name
+
+    def get_all_episode_dirs(self) -> list[Path]:
+        """Get all directories where episodes can be found (main + additional)."""
+        dirs = [self.episodes_path]
+        dirs.extend(self.additional_episode_dirs)
+        return dirs
+
+    def find_episode_path(self, episode_name: str) -> Optional[Path]:
+        """
+        Find the path to an episode directory by searching all episode directories.
+
+        Args:
+            episode_name: Name of the episode directory to find
+
+        Returns:
+            Path to the episode directory if found, None otherwise
+        """
+        for base_dir in self.get_all_episode_dirs():
+            if not base_dir.exists():
+                continue
+            episode_path = base_dir / episode_name
+            if episode_path.exists() and episode_path.is_dir():
+                return episode_path
+        return None

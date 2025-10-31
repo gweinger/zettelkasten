@@ -4,31 +4,91 @@
 
 {% block content %}
 <div class="note-container">
+    {% if flash_messages %}
+    {% for flash in flash_messages %}
+    <div class="alert alert-{{ flash.category }}">
+        {{ flash.message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
     <div class="note-header">
         <a href="javascript:history.back()" class="back-link">← Back</a>
         <div class="note-actions">
+            {% if is_episode %}
+            <div class="episode-actions">
+                <form method="POST" action="/episode/{{ episode_name }}/rss-link" style="display: inline;">
+                    <button type="submit" class="btn-small" title="Update RSS feed data">🔗 RSS Link</button>
+                </form>
+                <form method="POST" action="/episode/{{ episode_name }}/refresh" style="display: inline;" class="refresh-form">
+                    <button type="submit" class="btn-small refresh-btn" title="Full refresh: re-detect files and sync RSS">🔄 Refresh</button>
+                </form>
+                <form method="POST" action="/episode/{{ episode_name }}/remove" style="display: inline;" class="remove-form">
+                    <button type="submit" class="btn-small btn-danger-small remove-btn" title="Remove episode from index (files are preserved)">
+                        <span id="removeBtnText">🗑️ Remove</span>
+                        <span id="removeBtnLoading" style="display: none;">⏳ Removing...</span>
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+            {% if download_url %}
+            <a href="{{ download_url }}" download class="download-link" style="margin-right: 1rem;">⬇ Download</a>
+            {% endif %}
             <span class="note-path">{{ note_path }}</span>
         </div>
     </div>
 
-    {% if properties %}
-    <details class="properties-panel">
+    <!-- Episode Details Section (shown for episode pages) -->
+    {% if is_episode and properties %}
+    <details class="properties-panel episode-details-panel">
         <summary class="properties-header">
             <span class="properties-icon">▸</span>
-            <span class="properties-title">Properties</span>
+            <span class="properties-title">Episode Details</span>
         </summary>
         <div class="properties-content">
+            {% set episode_fields = ['episode_number', 'season_number', 'rss_title', 'rss_date', 'rss_author', 'duration', 'episode_type', 'explicit', 'keywords', 'image_url', 'enclosure_url', 'enclosure_type', 'enclosure_length', 'rss_link'] %}
+
             {% for key, value in properties.items() %}
-            <div class="property-row">
-                <span class="property-key">{{ key }}</span>
-                <span class="property-value">
-                    {% if value is string %}
-                        {{ value }}
-                    {% else %}
-                        {{ value | join(', ') }}
-                    {% endif %}
-                </span>
-            </div>
+                {% if key in episode_fields %}
+                <div class="property-row">
+                    <span class="property-key">{{ key }}</span>
+                    <span class="property-value">
+                        {% if value is string %}
+                            {{ value }}
+                        {% else %}
+                            {{ value | join(', ') }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <!-- Generic Properties Panel (for non-episode notes or additional properties) -->
+    {% if properties %}
+    <details class="properties-panel {% if is_episode %}other-properties-panel{% endif %}">
+        <summary class="properties-header">
+            <span class="properties-icon">▸</span>
+            <span class="properties-title">{% if is_episode %}Other Properties{% else %}Properties{% endif %}</span>
+        </summary>
+        <div class="properties-content">
+            {% set episode_fields = ['episode_number', 'season_number', 'rss_title', 'rss_date', 'rss_author', 'duration', 'episode_type', 'explicit', 'keywords', 'image_url', 'enclosure_url', 'enclosure_type', 'enclosure_length', 'rss_link'] %}
+
+            {% for key, value in properties.items() %}
+                {% if not is_episode or key not in episode_fields %}
+                <div class="property-row">
+                    <span class="property-key">{{ key }}</span>
+                    <span class="property-value">
+                        {% if value is string %}
+                            {{ value }}
+                        {% else %}
+                            {{ value | join(', ') }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
             {% endfor %}
         </div>
     </details>
@@ -51,6 +111,31 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 icon.textContent = '▸';
             }
+        });
+    }
+
+    // Add pending state to refresh button when clicked
+    const refreshForm = document.querySelector('.refresh-form');
+    if (refreshForm) {
+        refreshForm.addEventListener('submit', function(e) {
+            const refreshBtn = this.querySelector('.refresh-btn');
+            refreshBtn.disabled = true;
+            refreshBtn.classList.add('pending');
+            refreshBtn.textContent = '⏳ Refreshing...';
+        });
+    }
+
+    // Add pending state to remove button when clicked
+    const removeForm = document.querySelector('.remove-form');
+    if (removeForm) {
+        removeForm.addEventListener('submit', function(e) {
+            const removeBtn = this.querySelector('.remove-btn');
+            const removeBtnText = this.querySelector('#removeBtnText');
+            const removeBtnLoading = this.querySelector('#removeBtnLoading');
+            removeBtn.disabled = true;
+            removeBtn.classList.add('pending');
+            removeBtnText.style.display = 'none';
+            removeBtnLoading.style.display = 'inline';
         });
     }
 });

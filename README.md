@@ -52,27 +52,51 @@ cp .env.example .env
 
 ## Usage
 
-### Initialize a new vault
+### Web UI (Recommended)
+
+Run the web interface:
+```bash
+./run.sh
+```
+
+Then open http://127.0.0.1:8000 in your browser.
+
+The web UI provides:
+- Dashboard with vault statistics
+- Add content from URLs
+- Create new notes (concept, person, source, fleeting)
+- Review and approve staged notes
+- Browse notes and indexes
+
+The run script automatically:
+- Uses the correct Python version (python3)
+- Checks for and optionally kills existing processes on port 8000
+- Verifies the package is installed
+- Starts the server with hot-reload enabled
+
+### CLI Commands
+
+#### Initialize a new vault
 ```bash
 zk init
 ```
 
-### Seed from podcast RSS feed
+#### Seed from podcast RSS feed
 ```bash
 zk seed
 ```
 
-### Add content from URL
+#### Add content from URL
 ```bash
 zk add <url>
 ```
 
-### Create a new note
+#### Create a new note
 ```bash
 zk new
 ```
 
-### Show configuration
+#### Show configuration
 ```bash
 zk config --show
 ```

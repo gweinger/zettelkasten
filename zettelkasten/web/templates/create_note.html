@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Create Note - Zettelkasten{% endblock %}
+
+{% block content %}
+<div class="add-url-container">
+    <h1>✏️ Create New Note</h1>
+    <p class="subtitle">Create a new note with automatic structure and metadata</p>
+
+    {% if error %}
+    <div class="alert alert-error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/create-note" class="add-url-form">
+        <div class="form-group">
+            <label for="title">Note Title</label>
+            <input
+                type="text"
+                id="title"
+                name="title"
+                required
+                placeholder="e.g., Deep Work, Marie Curie, Learning Strategies"
+                autofocus
+            >
+            <div class="form-help">
+                The main title for your note
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="note_type">Note Type</label>
+            <select id="note_type" name="note_type" class="form-select">
+                <option value="concept" selected>Concept / Permanent Note</option>
+                <option value="person">Person / Contact</option>
+                <option value="source">Source / Literature</option>
+                <option value="fleeting">Fleeting Note</option>
+            </select>
+            <div class="form-help">
+                <strong>Concept:</strong> Ideas, theories, concepts<br>
+                <strong>Person:</strong> People, contacts, authors<br>
+                <strong>Source:</strong> Books, articles, papers<br>
+                <strong>Fleeting:</strong> Quick thoughts, temporary notes
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description (Optional)</label>
+            <textarea
+                id="description"
+                name="description"
+                rows="6"
+                placeholder="Enter your initial thoughts, context, or description about this topic..."
+            ></textarea>
+            <div class="form-help">
+                Your initial description or thoughts. If auto-fill is enabled, Claude will use this as context.
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="reference_urls">Reference URLs (Optional)</label>
+            <textarea
+                id="reference_urls"
+                name="reference_urls"
+                rows="3"
+                placeholder="https://example.com/article&#10;https://linkedin.com/in/username&#10;https://en.wikipedia.org/wiki/Topic"
+            ></textarea>
+            <div class="form-help">
+                Add reference URLs (one per line) for Claude to look up when generating content.<br>
+                Examples: Wikipedia articles, LinkedIn profiles, personal websites, documentation
+            </div>
+        </div>
+
+        <div class="form-group checkbox-group">
+            <label>
+                <input type="checkbox" name="auto_fill" value="true" checked>
+                Auto-fill with AI-generated content (requires API key)
+            </label>
+            <div class="form-help">
+                Uses Claude to generate description and find related notes.<br>
+                If you provide description/URLs above, Claude will use them as context.
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-small">Create Note</button>
+            <a href="/" class="btn-small">Cancel</a>
+        </div>
+    </form>
+
+    <div class="info-section">
+        <h2>What happens when you create a note?</h2>
+        <ul>
+            <li>A timestamped filename is generated automatically</li>
+            <li>YAML frontmatter with metadata is added</li>
+            <li>Note is saved to the appropriate directory based on type</li>
+            <li>If auto-fill is enabled:
+                <ul>
+                    <li><strong>Concept notes:</strong> Claude generates a description and finds backlinks</li>
+                    <li><strong>Person notes:</strong> Web research populates professional information</li>
+                </ul>
+            </li>
+            <li>Indices are automatically updated</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

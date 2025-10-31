@@ -10,6 +10,14 @@
         <p class="subtitle">Review notes before approving them to your vault</p>
     </div>
 
+    {% if flash_messages %}
+    {% for flash in flash_messages %}
+    <div class="alert alert-{{ flash.category }}">
+        {{ flash.message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
     {% if count == 0 %}
     <div class="empty-state">
         <p>📭 No files in staging</p>
@@ -28,7 +36,7 @@
                 <p class="file-path">{{ file.path }}</p>
             </a>
             <div class="file-actions">
-                <a href="/staging/view/{{ file.path }}" class="btn btn-sm btn-primary">
+                <a href="/staging/view/{{ file.path }}" class="btn-small btn-action">
                     👁️ View
                 </a>
             </div>
@@ -37,10 +45,10 @@
     </div>
 
     <div class="bulk-actions">
-        <button class="btn btn-primary" onclick="alert('Coming soon: Approve All')">
+        <button class="btn-small btn-action" onclick="alert('Coming soon: Approve All')">
             ✓ Approve All
         </button>
-        <button class="btn btn-danger" onclick="alert('Coming soon: Clear All')">
+        <button class="btn-small btn-action" onclick="alert('Coming soon: Clear All')">
             🗑️ Clear All
         </button>
     </div>

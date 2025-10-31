@@ -3,10 +3,11 @@
 from pathlib import Path
 from typing import List, Optional
 import markdown
-from fastapi import FastAPI, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from zettelkasten.core.config import Config
 from zettelkasten.core.models import ContentType
@@ -15,6 +16,9 @@ from zettelkasten.core.workflow import AddWorkflow
 # Initialize FastAPI app
 app = FastAPI(title="Zettelkasten Web UI", version="0.1.0")
 
+# Add session middleware for flash messages
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here-change-in-production")
+
 # Get project root
 project_root = Path(__file__).parent.parent.parent
 
@@ -22,12 +26,41 @@ project_root = Path(__file__).parent.parent.parent
 static_path = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+# Load config first (needed for episodes path)
+config = Config.from_env()
+
+# Note: Episodes are served via custom routes (/episodes for management, /episode-media for files)
+# We don't mount /episodes as static files because that would prevent the /episodes routes from working
+
 # Setup Jinja2 templates
 templates_path = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_path))
 
-# Load config
-config = Config.from_env()
+
+# Flash message helpers
+def set_flash(request: Request, message: str, category: str = "info"):
+    """Set a flash message in the session."""
+    if "flash_messages" not in request.session:
+        request.session["flash_messages"] = []
+    request.session["flash_messages"].append({"message": message, "category": category})
+
+
+def get_flashed_messages(request: Request) -> List[dict]:
+    """Get and clear flash messages from the session."""
+    messages = request.session.pop("flash_messages", [])
+    return messages
+
+
+# Background task for reindexing
+def rebuild_indices_task():
+    """Rebuild indices in the background."""
+    try:
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_generator = IndexGenerator(config)
+        index_generator.rebuild_indices()
+        print("✓ Indices rebuilt successfully")
+    except Exception as e:
+        print(f"✗ Error rebuilding indices: {e}")
 
 
 # Exception handlers
@@ -67,6 +100,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page showing vault overview."""
+    from zettelkasten.utils.episode_manager import EpisodeManager
 
     # Get vault statistics
     permanent_notes_path = config.get_permanent_notes_path()
@@ -83,6 +117,10 @@ async def home(request: Request):
 
     staging_files = list(staging_path.glob("**/*.md"))
 
+    # Count episodes
+    episode_manager = EpisodeManager(config)
+    episodes = episode_manager.list_episodes()
+
     # Count person notes (properly parse tags from frontmatter)
     person_notes = []
     for note_file in permanent_notes:
@@ -95,6 +133,7 @@ async def home(request: Request):
         "total_concepts": len(permanent_notes),  # Include all notes (people are a subset)
         "total_people": len(person_notes),
         "total_sources": len(sources),
+        "total_episodes": len(episodes),
         "staging_files": len(staging_files),
     }
 
@@ -116,6 +155,7 @@ async def home(request: Request):
             "stats": stats,
             "indexes": indexes,
             "vault_name": config.vault_name,
+            "active_section": "home",
         }
     )
 
@@ -160,6 +200,7 @@ async def view_index(request: Request, index_type: str):
             "title": title,
             "content": html_content,
             "properties": properties,
+            "active_section": index_type,
         }
     )
 
@@ -175,30 +216,59 @@ async def view_note(request: Request, note_path: str):
 
     # If not found directly, search in common directories
     if not full_path.exists():
-        # Try to find the note by filename in permanent-notes, sources/summaries, etc.
-        filename = Path(note_path).name
-        if not filename.endswith('.md'):
-            filename = filename + '.md'
+        # Check if this is an episodes path (e.g., "episodes/Grant Harris/index")
+        if note_path.startswith("episodes/"):
+            # Extract episode name from path
+            path_parts = note_path.split('/')
+            if len(path_parts) >= 2:
+                episode_name = path_parts[1]
+                # Search for episode in all configured directories
+                episode_path = config.find_episode_path(episode_name)
+                if episode_path:
+                    # Reconstruct the full path within the found episode directory
+                    remaining_path = '/'.join(path_parts[2:]) if len(path_parts) > 2 else ''
+                    if remaining_path:
+                        full_path = episode_path / remaining_path
+                    else:
+                        full_path = episode_path
+                    if not full_path.suffix:
+                        full_path = full_path.with_suffix(".md")
 
-        search_dirs = [
-            config.get_permanent_notes_path(),
-            config.get_sources_path(),  # For source summaries
-            config.get_sources_path().parent / "sources" / "summaries",  # Explicit summaries path
-            config.get_fleeting_notes_path(),
-        ]
+            # If still not found, try the old way (sources/episodes/)
+            if not full_path.exists():
+                sources_base = config.get_sources_base_path()
+                full_path = sources_base / note_path
+                if not full_path.suffix:
+                    full_path = full_path.with_suffix(".md")
+        else:
+            # Try to find the note by filename in permanent-notes, sources/summaries, etc.
+            filename = Path(note_path).name
+            if not filename.endswith('.md'):
+                filename = filename + '.md'
 
-        for search_dir in search_dirs:
-            if not search_dir.exists():
-                continue
-            potential_path = search_dir / filename
-            if potential_path.exists():
-                full_path = potential_path
-                break
+            search_dirs = [
+                config.get_permanent_notes_path(),
+                config.get_sources_path(),  # For source summaries
+                config.get_sources_path().parent / "sources" / "summaries",  # Explicit summaries path
+                config.get_fleeting_notes_path(),
+            ]
+
+            for search_dir in search_dirs:
+                if not search_dir.exists():
+                    continue
+                potential_path = search_dir / filename
+                if potential_path.exists():
+                    full_path = potential_path
+                    break
 
         if not full_path.exists():
             raise HTTPException(status_code=404, detail="Note not found")
 
-    # Read and render markdown
+    # Check if this is a text file (not markdown)
+    is_text_file = full_path.suffix.lower() == '.txt'
+    download_url = None
+
+    # Read and render content
     content = full_path.read_text()
 
     # Extract title from frontmatter or first heading
@@ -210,11 +280,41 @@ async def view_note(request: Request, note_path: str):
     # Remove frontmatter from content before rendering
     content_without_fm = remove_frontmatter(content)
 
-    # Render markdown
-    html_content = markdown.markdown(content_without_fm, extensions=['extra', 'codehilite', 'fenced_code'])
+    if is_text_file:
+        # For text files, render as preformatted text with download link
+        # Generate download URL pointing to the static episodes mount
+        if note_path.startswith("episodes/"):
+            from urllib.parse import quote
+            parts = note_path.split('/')
+            if len(parts) >= 3:
+                episode_dir = parts[1]
+                filename = parts[-1]
+                download_url = f"/episodes/{quote(episode_dir)}/{quote(filename)}"
+
+        # Wrap content in <pre> tags for plain text display
+        html_content = f'<pre style="white-space: pre-wrap; word-wrap: break-word;">{content_without_fm}</pre>'
+    else:
+        # Render markdown
+        html_content = markdown.markdown(content_without_fm, extensions=['extra', 'codehilite', 'fenced_code'])
 
     # Convert wikilinks to HTML links
-    html_content = convert_wikilinks(html_content, base_path=str(full_path.parent.relative_to(config.vault_path)))
+    # Try to get relative path, but handle episodes in additional directories
+    try:
+        base_path = str(full_path.parent.relative_to(config.vault_path))
+    except ValueError:
+        # File is outside vault (e.g., in additional episode directory)
+        base_path = ""
+    html_content = convert_wikilinks(html_content, base_path=base_path)
+
+    # If this is an episode page, fix media file links
+    is_episode = note_path.startswith("episodes/")
+    episode_name = None
+    if is_episode:
+        html_content = fix_episode_media_links(html_content, note_path)
+        # Extract episode name from path (e.g., "episodes/Grant Harris/index" -> "Grant Harris")
+        path_parts = note_path.split('/')
+        if len(path_parts) >= 2:
+            episode_name = path_parts[1]
 
     return templates.TemplateResponse(
         "note.html",
@@ -224,8 +324,235 @@ async def view_note(request: Request, note_path: str):
             "content": html_content,
             "note_path": note_path,
             "properties": properties,
+            "download_url": download_url,
+            "is_text_file": is_text_file,
+            "flash_messages": get_flashed_messages(request),
+            "is_episode": is_episode,
+            "episode_name": episode_name,
         }
     )
+
+
+@app.post("/episode/{episode_name}/rss-link", response_class=HTMLResponse)
+async def rss_link_episode(request: Request, episode_name: str):
+    """Link an episode to RSS feed data."""
+    try:
+        from zettelkasten.utils.rss_manager import RSSManager
+
+        rss_manager = RSSManager(config)
+
+        # Try to find matching episode in RSS
+        rss_episode = rss_manager.find_matching_episode(episode_name)
+        if not rss_episode:
+            set_flash(request, f"⚠ No matching RSS data found for '{episode_name}'", "warning")
+            return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+        # Find episode directory
+        episode_path = config.find_episode_path(episode_name)
+        if not episode_path:
+            set_flash(request, f"❌ Episode directory not found: {episode_name}", "error")
+            return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+        # Update index.md with RSS data
+        index_file = episode_path / "index.md"
+        if not index_file.exists():
+            set_flash(request, f"❌ index.md not found", "error")
+            return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+        import yaml
+        content = index_file.read_text(encoding='utf-8')
+        parts = content.split('---')
+        if len(parts) < 3:
+            set_flash(request, f"❌ Invalid frontmatter", "error")
+            return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+        frontmatter_str = parts[1]
+        body = '---'.join(parts[2:])
+        frontmatter = yaml.safe_load(frontmatter_str) or {}
+
+        # Add RSS metadata
+        frontmatter['rss_title'] = rss_episode['title']
+        frontmatter['rss_description'] = rss_episode['description'][:500]
+        frontmatter['rss_date'] = rss_episode['pub_date']
+
+        # Write back updated frontmatter
+        new_frontmatter = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
+        updated_content = f"---\n{new_frontmatter}---{body}"
+        index_file.write_text(updated_content, encoding='utf-8')
+
+        set_flash(request, f"✓ RSS data updated for '{episode_name}'", "success")
+        return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+    except Exception as e:
+        set_flash(request, f"❌ Error: {str(e)}", "error")
+        return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+
+@app.post("/episode/{episode_name}/refresh", response_class=HTMLResponse)
+async def refresh_episode(request: Request, episode_name: str, background_tasks: BackgroundTasks):
+    """Full refresh of an episode (remove and re-import)."""
+    try:
+        from zettelkasten.utils.episode_manager import EpisodeManager
+
+        episode_manager = EpisodeManager(config)
+
+        # Find episode directory
+        episode_path = config.find_episode_path(episode_name)
+        if not episode_path:
+            set_flash(request, f"❌ Episode directory not found: {episode_name}", "error")
+            return RedirectResponse(url="/episodes", status_code=303)
+
+        # Check if index.md exists
+        index_file = episode_path / "index.md"
+        if not index_file.exists():
+            set_flash(request, f"❌ Episode not indexed: {episode_name}", "error")
+            return RedirectResponse(url="/episodes", status_code=303)
+
+        # Get current episode number from frontmatter
+        import yaml
+        content = index_file.read_text(encoding='utf-8')
+        parts = content.split('---')
+        current_episode_number = None
+        if len(parts) >= 3:
+            frontmatter = yaml.safe_load(parts[1]) or {}
+            current_episode_number = frontmatter.get('episode_number')
+
+        # Delete index.md
+        index_file.unlink()
+
+        # Re-import with same episode number
+        episode_manager.import_existing_episode(episode_name, episode_number=current_episode_number)
+
+        # Rebuild indices
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_gen = IndexGenerator(config)
+        index_gen.rebuild_indices()
+
+        set_flash(request, f"✓ Episode '{episode_name}' refreshed successfully", "success")
+        return RedirectResponse(url=f"/note/episodes/{episode_name}/index", status_code=303)
+
+    except Exception as e:
+        set_flash(request, f"❌ Error refreshing episode: {str(e)}", "error")
+        return RedirectResponse(url="/episodes", status_code=303)
+
+
+@app.post("/episode/{episode_name}/remove", response_class=HTMLResponse)
+async def remove_episode(request: Request, episode_name: str, background_tasks: BackgroundTasks):
+    """Remove episode from index (keeps files intact)."""
+    try:
+        # Find episode directory
+        episode_path = config.find_episode_path(episode_name)
+        if not episode_path:
+            set_flash(request, f"❌ Episode directory not found: {episode_name}", "error")
+            return RedirectResponse(url="/episodes", status_code=303)
+
+        # Delete index.md
+        index_file = episode_path / "index.md"
+        if index_file.exists():
+            index_file.unlink()
+
+        # Rebuild indices to remove from index
+        from zettelkasten.generators.index_generator import IndexGenerator
+        index_gen = IndexGenerator(config)
+        index_gen.rebuild_indices()
+
+        set_flash(request, f"✓ Episode '{episode_name}' removed from index (files preserved)", "success")
+        return RedirectResponse(url="/episodes", status_code=303)
+
+    except Exception as e:
+        set_flash(request, f"❌ Error removing episode: {str(e)}", "error")
+        return RedirectResponse(url="/episodes", status_code=303)
+
+
+# Workflow Routes
+@app.get("/workflows/interview-questions", response_class=HTMLResponse)
+async def workflow_interview_questions(request: Request):
+    """Show the generate interview questions workflow page."""
+    return templates.TemplateResponse(
+        "workflow_interview_questions.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "active_section": "interview-questions",
+        }
+    )
+
+
+@app.post("/workflows/interview-questions", response_class=HTMLResponse)
+async def generate_interview_questions_workflow(
+    request: Request,
+    guest_name: str = Form(...),
+):
+    """Generate interview questions for an episode."""
+    try:
+        from zettelkasten.utils.interview_generator import InterviewQuestionGenerator
+
+        # Find episode directory
+        episode_path = config.find_episode_path(guest_name)
+        if not episode_path:
+            return templates.TemplateResponse(
+                "workflow_interview_questions.html",
+                {
+                    "request": request,
+                    "error": f"❌ Episode directory not found for '{guest_name}'",
+                    "vault_name": config.vault_name,
+                    "active_section": "interview-questions",
+                }
+            )
+
+        # Look for prep transcript
+        transcript_file = None
+        for potential_name in ["prep conversation transcript.txt", "prep conversation transcript.md", "prep-transcript.txt"]:
+            potential_file = episode_path / potential_name
+            if potential_file.exists():
+                transcript_file = potential_file
+                break
+
+        # Check for wildcard match if not found
+        if not transcript_file:
+            import glob
+            for pattern in ["*pre*.txt", "*pre*.md", "*prep*.txt", "*prep*.md"]:
+                matches = list(episode_path.glob(pattern))
+                if matches:
+                    transcript_file = matches[0]
+                    break
+
+        # Require transcript
+        if not transcript_file or not transcript_file.exists():
+            return templates.TemplateResponse(
+                "workflow_interview_questions.html",
+                {
+                    "request": request,
+                    "error": f"❌ Prep conversation transcript not found for '{guest_name}'. Expected one of: prep conversation transcript.txt, prep-transcript.txt, or *pre*.txt",
+                    "vault_name": config.vault_name,
+                    "active_section": "interview-questions",
+                }
+            )
+
+        # Generate questions
+        generator = InterviewQuestionGenerator(config)
+        questions = generator.generate_questions(
+            guest_name=guest_name,
+            transcript_path=transcript_file,
+        )
+
+        # Save to file
+        questions_file = episode_path / "interview questions.md"
+        generator.save_questions(questions, questions_file)
+
+        set_flash(request, f"✓ Interview questions generated and saved for '{guest_name}'", "success")
+        return RedirectResponse(url=f"/note/episodes/{guest_name}/index", status_code=303)
+
+    except Exception as e:
+        return templates.TemplateResponse(
+            "workflow_interview_questions.html",
+            {
+                "request": request,
+                "error": f"❌ Error generating questions: {str(e)}",
+                "vault_name": config.vault_name,
+                "active_section": "interview-questions",
+            }
+        )
 
 
 @app.get("/add-url", response_class=HTMLResponse)
@@ -237,6 +564,7 @@ async def add_url_form(request: Request, error: Optional[str] = None):
             "request": request,
             "vault_name": config.vault_name,
             "error": error,
+            "active_section": "add-url",
         }
     )
 
@@ -256,6 +584,7 @@ async def add_url_submit(request: Request, url: str = Form(...), force: Optional
                     "request": request,
                     "vault_name": config.vault_name,
                     "error": error,
+                    "active_section": "add-url",
                 }
             )
 
@@ -292,6 +621,7 @@ async def add_url_submit(request: Request, url: str = Form(...), force: Optional
                 "title": title,
                 "file_count": len(saved_paths),
                 "file_paths": file_paths,
+                "active_section": "add-url",
             }
         )
 
@@ -303,6 +633,7 @@ async def add_url_submit(request: Request, url: str = Form(...), force: Optional
                 "request": request,
                 "vault_name": config.vault_name,
                 "error": str(e),
+                "active_section": "add-url",
             }
         )
     except Exception as e:
@@ -313,6 +644,122 @@ async def add_url_submit(request: Request, url: str = Form(...), force: Optional
             {
                 "request": request,
                 "vault_name": config.vault_name,
+                "error": error,
+                "active_section": "add-url",
+            }
+        )
+
+
+@app.get("/episodes", response_class=HTMLResponse)
+async def view_episodes(request: Request):
+    """View episodes landing page."""
+    from zettelkasten.utils.episode_manager import EpisodeManager
+
+    episode_manager = EpisodeManager(config)
+    episode_names = episode_manager.list_episodes()
+
+    # Get episode details
+    episodes_data = []
+    for episode_name in episode_names:
+        episode_path = config.find_episode_path(episode_name)
+        if episode_path:
+            index_file = episode_path / "index.md"
+            if index_file.exists():
+                content = index_file.read_text()
+                # Parse YAML frontmatter to get episode metadata
+                properties = extract_frontmatter_properties(content)
+
+                # Ensure episode_number is an integer for proper sorting
+                ep_num = properties.get("episode_number", 999)
+                if isinstance(ep_num, str):
+                    try:
+                        ep_num = int(ep_num)
+                    except (ValueError, TypeError):
+                        ep_num = 999
+
+                episodes_data.append({
+                    "directory_name": episode_name,
+                    "title": properties.get("title", episode_name),
+                    "episode_number": ep_num,
+                    "guest_name": properties.get("guest_name", ""),
+                    "summary": properties.get("summary", ""),
+                })
+
+    # Count published vs planning episodes
+    published_episodes = len([e for e in episodes_data if e.get("episode_number", 999) != 999])
+    planning_episodes = len([e for e in episodes_data if e.get("episode_number", 999) == 999])
+
+    stats = {
+        "total_episodes": len(episodes_data),
+        "published_episodes": published_episodes,
+        "planning_episodes": planning_episodes,
+    }
+
+    # Sort by episode_number in descending order (newest first)
+    episodes_data.sort(key=lambda x: int(x["episode_number"]) if isinstance(x["episode_number"], (int, float)) else 0, reverse=True)
+
+    return templates.TemplateResponse(
+        "episodes.html",
+        {
+            "request": request,
+            "episodes": episodes_data,
+            "stats": stats,
+            "vault_name": config.vault_name,
+            "active_section": "episodes",
+        }
+    )
+
+
+@app.post("/episodes/import", response_class=HTMLResponse)
+async def import_episode(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    episode_dir: str = Form(...),
+    episode_number: Optional[int] = Form(None),
+):
+    """Import an episode directory."""
+    from zettelkasten.utils.episode_manager import EpisodeManager
+
+    try:
+        episode_manager = EpisodeManager(config)
+        episode_path, episode, file_mapping = episode_manager.import_existing_episode(
+            episode_dir,
+            episode_number=episode_number,
+        )
+
+        # Schedule index rebuild
+        background_tasks.add_task(rebuild_indices_task)
+
+        # Redirect to episodes page with success message
+        set_flash(
+            request,
+            f"✓ Episode '{episode_dir}' imported successfully (Episode {episode.episode_number})",
+            "success",
+        )
+        return RedirectResponse(url="/episodes", status_code=303)
+
+    except ValueError as e:
+        return templates.TemplateResponse(
+            "episodes.html",
+            {
+                "request": request,
+                "episodes": [],
+                "stats": {"total_episodes": 0, "published_episodes": 0, "planning_episodes": 0},
+                "vault_name": config.vault_name,
+                "active_section": "episodes",
+                "error": str(e),
+            }
+        )
+    except Exception as e:
+        error = f"Unexpected error: {str(e)}"
+        return templates.TemplateResponse(
+            "episodes.html",
+            {
+                "request": request,
+                "episodes": [],
+                "stats": {"total_episodes": 0, "published_episodes": 0, "planning_episodes": 0},
+                "vault_name": config.vault_name,
+                "active_section": "episodes",
                 "error": error,
             }
         )
@@ -345,6 +792,8 @@ async def view_staging(request: Request):
             "request": request,
             "files": files_data,
             "count": len(files_data),
+            "flash_messages": get_flashed_messages(request),
+            "active_section": "staging",
         }
     )
 
@@ -378,6 +827,7 @@ async def view_staging_file(request: Request, file_path: str):
             "file_path": file_path,
             "content": html_content,
             "properties": properties,
+            "active_section": "staging",
         }
     )
 
@@ -402,6 +852,7 @@ async def edit_staging_file_form(request: Request, file_path: str):
             "file_path": file_path,
             "content": content,
             "error": None,
+            "active_section": "staging",
         }
     )
 
@@ -432,12 +883,13 @@ async def edit_staging_file_save(request: Request, file_path: str, content: str 
                 "file_path": file_path,
                 "content": content,
                 "error": str(e),
+                "active_section": "staging",
             }
         )
 
 
 @app.post("/staging/approve/{file_path:path}")
-async def approve_staging_file(file_path: str):
+async def approve_staging_file(request: Request, file_path: str, background_tasks: BackgroundTasks):
     """Approve and move a single staging file to vault."""
     import shutil
 
@@ -502,10 +954,11 @@ async def approve_staging_file(file_path: str):
             destination = destination_dir / full_path.name
             shutil.move(str(full_path), str(destination))
 
-        # Rebuild indices
-        from zettelkasten.generators.index_generator import IndexGenerator
-        index_generator = IndexGenerator(config)
-        index_generator.rebuild_indices()
+        # Schedule index rebuild as background task
+        background_tasks.add_task(rebuild_indices_task)
+
+        # Set flash message
+        set_flash(request, "✓ File approved successfully. Rebuilding indices in background...", "success")
 
         # Redirect back to staging list
         return RedirectResponse(url="/staging", status_code=303)
@@ -528,6 +981,201 @@ async def delete_staging_file(file_path: str):
         return RedirectResponse(url="/staging", status_code=303)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+
+
+@app.get("/create-note", response_class=HTMLResponse)
+async def create_note_form(request: Request, error: Optional[str] = None):
+    """Show the Create Note form."""
+    return templates.TemplateResponse(
+        "create_note.html",
+        {
+            "request": request,
+            "vault_name": config.vault_name,
+            "error": error,
+            "active_section": "create-note",
+        }
+    )
+
+
+@app.post("/create-note", response_class=HTMLResponse)
+async def create_note_submit(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    title: str = Form(...),
+    note_type: str = Form(...),
+    auto_fill: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    reference_urls: Optional[str] = Form(None),
+):
+    """Process note creation."""
+    from datetime import datetime
+    from zettelkasten.generators.note_content_generator import NoteContentGenerator
+
+    auto_fill_bool = auto_fill == "true"
+
+    # Parse reference URLs (one per line)
+    urls_list = None
+    if reference_urls and reference_urls.strip():
+        urls_list = [url.strip() for url in reference_urls.strip().split('\n') if url.strip()]
+
+    try:
+        # Check for duplicate notes (only for concept and person notes)
+        if note_type in ["concept", "permanent", "permanent-note", "person", "contact"]:
+            from zettelkasten.utils.vault_scanner import find_matching_concept
+
+            existing_note = find_matching_concept(title, config)
+            if existing_note:
+                error = f"A note with a similar title already exists: '{existing_note['title']}' at {existing_note['filepath']}"
+                return templates.TemplateResponse(
+                    "create_note.html",
+                    {
+                        "request": request,
+                        "vault_name": config.vault_name,
+                        "error": error,
+                        "active_section": "create-note",
+                    }
+                )
+
+        # Validate API key if auto_fill is enabled
+        if auto_fill_bool and (not config.anthropic_api_key or config.anthropic_api_key == "your_anthropic_api_key_here"):
+            error = "ANTHROPIC_API_KEY not configured. Auto-fill requires an Anthropic API key in the .env file."
+            return templates.TemplateResponse(
+                "create_note.html",
+                {
+                    "request": request,
+                    "vault_name": config.vault_name,
+                    "error": error,
+                    "active_section": "create-note",
+                }
+            )
+
+        # Create timestamp
+        timestamp = datetime.now()
+        timestamp_str = timestamp.strftime("%Y%m%d%H%M%S")
+
+        # Generate filename
+        slug = title.lower().replace(" ", "-")
+        slug = "".join(c for c in slug if c.isalnum() or c == "-")
+        filename = f"{timestamp_str}-{slug}.md"
+
+        # Determine directory based on type
+        note_type = note_type.lower()
+        if note_type in ["concept", "permanent", "permanent-note"]:
+            directory = config.get_permanent_notes_path()
+            tags = ["concept", "permanent-note"]
+        elif note_type in ["source", "literature"]:
+            directory = config.get_sources_path()
+            tags = ["source"]
+        elif note_type in ["person", "contact"]:
+            directory = config.get_permanent_notes_path()
+            tags = ["person", "contact"]
+        elif note_type in ["fleeting", "fleeting-note"]:
+            directory = config.get_fleeting_notes_path()
+            tags = ["fleeting", "fleeting-note"]
+        else:
+            error = f"Invalid note type '{note_type}'"
+            return templates.TemplateResponse(
+                "create_note.html",
+                {
+                    "request": request,
+                    "vault_name": config.vault_name,
+                    "error": error,
+                    "active_section": "create-note",
+                }
+            )
+
+        # Ensure directory exists
+        directory.mkdir(parents=True, exist_ok=True)
+
+        filepath = directory / filename
+
+        # Check if file already exists
+        if filepath.exists():
+            error = f"File already exists: {filepath}"
+            return templates.TemplateResponse(
+                "create_note.html",
+                {
+                    "request": request,
+                    "vault_name": config.vault_name,
+                    "error": error,
+                    "active_section": "create-note",
+                }
+            )
+
+        # Build note content
+        lines = []
+        lines.append("---")
+        lines.append(f"title: {title}")
+        lines.append(f"created: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"tags: [{', '.join(tags)}]")
+        lines.append("---")
+        lines.append("")
+        lines.append(f"# {title}")
+        lines.append("")
+
+        # Generate content based on note type and auto_fill flag
+        content_generator = NoteContentGenerator(config)
+
+        if note_type in ["concept", "permanent", "permanent-note"]:
+            backlink_sources = None
+            if auto_fill_bool:
+                # Find backlinks from existing notes
+                from zettelkasten.utils.orphan_finder import OrphanFinder
+                finder = OrphanFinder(config.vault_path)
+                backlink_sources = finder.find_backlinks(title)
+
+            note_lines = content_generator.generate_concept_note_content(
+                title,
+                backlink_sources,
+                auto_fill=auto_fill_bool,
+                user_description=description,
+                reference_urls=urls_list,
+            )
+            lines.extend(note_lines)
+
+        elif note_type in ["source", "literature"]:
+            note_lines = content_generator.generate_source_note_content(auto_fill=auto_fill_bool)
+            lines.extend(note_lines)
+
+        elif note_type in ["person", "contact"]:
+            # Generate person note with URL context support
+            note_lines = content_generator.generate_person_note_content(
+                title,
+                auto_fill=auto_fill_bool,
+                research_data=None,
+                user_description=description,
+                reference_urls=urls_list,
+            )
+            lines.extend(note_lines)
+
+        elif note_type in ["fleeting", "fleeting-note"]:
+            note_lines = content_generator.generate_fleeting_note_content()
+            lines.extend(note_lines)
+
+        # Write file
+        filepath.write_text("\n".join(lines))
+
+        # Schedule index rebuild as background task
+        background_tasks.add_task(rebuild_indices_task)
+
+        # Set flash message
+        set_flash(request, f"✓ Note created successfully: {filename}. Rebuilding indices in background...", "success")
+
+        # Redirect to view the new note
+        relative_path = filepath.relative_to(config.vault_path)
+        return RedirectResponse(url=f"/note/{relative_path}", status_code=303)
+
+    except Exception as e:
+        error = f"Error creating note: {str(e)}"
+        return templates.TemplateResponse(
+            "create_note.html",
+            {
+                "request": request,
+                "vault_name": config.vault_name,
+                "error": error,
+                "active_section": "create-note",
+            }
+        )
 
 
 def extract_frontmatter_properties(content: str) -> dict:
@@ -682,6 +1330,67 @@ def convert_wikilinks(html: str, base_path: str = "") -> str:
         return f'<a href="{url}" class="wikilink">{display_text}</a>'
 
     return re.sub(pattern, replace_wikilink, html)
+
+
+@app.get("/episode-media/{episode_name}/{file_path:path}")
+async def serve_episode_media(episode_name: str, file_path: str):
+    """
+    Serve media files from episode directories, searching all configured episode paths.
+    """
+    # Search for the episode in all configured directories
+    episode_path = config.find_episode_path(episode_name)
+
+    if episode_path is None:
+        raise HTTPException(status_code=404, detail=f"Episode directory not found: {episode_name}")
+
+    # Construct full file path
+    full_file_path = episode_path / file_path
+
+    if not full_file_path.exists() or not full_file_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+    # Serve the file
+    return FileResponse(full_file_path)
+
+
+def fix_episode_media_links(html: str, note_path: str) -> str:
+    """
+    Fix relative links in episode pages to point to the /episode-media/ route.
+
+    Converts links like <a href="file.mp4">file.mp4</a> to <a href="/episode-media/Grant Harris/file.mp4">file.mp4</a>
+    """
+    import re
+    from urllib.parse import quote
+
+    # Extract episode directory from note_path (e.g., "episodes/Grant Harris/index" -> "Grant Harris")
+    parts = note_path.split('/')
+    if len(parts) >= 2:
+        episode_dir = parts[1]
+    else:
+        return html
+
+    # Pattern to match <a href="relative-file">...</a>
+    # We need to be more specific and look for file extensions
+    # Exclude .md files so they go through the /note/ route for rendering
+    pattern = r'<a href="([^"]+\.(mp4|wav|mp3|txt|png|jpg|jpeg|webp|pdf))">([^<]+)</a>'
+
+    def replace_link(match):
+        href = match.group(1)
+        link_text = match.group(3)
+
+        # Skip absolute URLs
+        if href.startswith(('http://', 'https://', '/')):
+            return match.group(0)
+
+        # This is a relative file link - convert to /episode-media/ URL
+        # URL-encode the episode directory name and filename
+        encoded_episode = quote(episode_dir)
+        encoded_file = quote(href)
+        new_href = f"/episode-media/{encoded_episode}/{encoded_file}"
+
+        return f'<a href="{new_href}">{link_text}</a>'
+
+    return re.sub(pattern, replace_link, html, flags=re.IGNORECASE)
 
 
 if __name__ == "__main__":
