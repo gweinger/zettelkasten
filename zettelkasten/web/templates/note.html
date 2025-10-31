@@ -15,7 +15,7 @@
     <div class="note-header">
         <a href="javascript:history.back()" class="back-link">← Back</a>
         <div class="note-actions">
-            {% if is_episode %}
+            {% if is_episode_index %}
             <div class="episode-actions">
                 <form method="POST" action="/episode/{{ episode_name }}/rss-link" style="display: inline;">
                     <button type="submit" class="btn-small" title="Update RSS feed data">🔗 RSS Link</button>
@@ -38,8 +38,8 @@
         </div>
     </div>
 
-    <!-- Episode Details Section (shown for episode pages) -->
-    {% if is_episode and properties %}
+    <!-- Episode Details Section (shown for episode index page only) -->
+    {% if is_episode_index and properties %}
     <details class="properties-panel episode-details-panel">
         <summary class="properties-header">
             <span class="properties-icon">▸</span>
@@ -67,17 +67,14 @@
     {% endif %}
 
     <!-- Generic Properties Panel (for non-episode notes or additional properties) -->
-    {% if properties %}
-    <details class="properties-panel {% if is_episode %}other-properties-panel{% endif %}">
+    {% if properties and not is_episode_index %}
+    <details class="properties-panel">
         <summary class="properties-header">
             <span class="properties-icon">▸</span>
-            <span class="properties-title">{% if is_episode %}Other Properties{% else %}Properties{% endif %}</span>
+            <span class="properties-title">Properties</span>
         </summary>
         <div class="properties-content">
-            {% set episode_fields = ['episode_number', 'season_number', 'rss_title', 'rss_date', 'rss_author', 'duration', 'episode_type', 'explicit', 'keywords', 'image_url', 'enclosure_url', 'enclosure_type', 'enclosure_length', 'rss_link'] %}
-
             {% for key, value in properties.items() %}
-                {% if not is_episode or key not in episode_fields %}
                 <div class="property-row">
                     <span class="property-key">{{ key }}</span>
                     <span class="property-value">
@@ -88,7 +85,6 @@
                         {% endif %}
                     </span>
                 </div>
-                {% endif %}
             {% endfor %}
         </div>
     </details>

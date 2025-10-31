@@ -309,12 +309,15 @@ async def view_note(request: Request, note_path: str):
     # If this is an episode page, fix media file links
     is_episode = note_path.startswith("episodes/")
     episode_name = None
+    is_episode_index = False
     if is_episode:
         html_content = fix_episode_media_links(html_content, note_path)
         # Extract episode name from path (e.g., "episodes/Grant Harris/index" -> "Grant Harris")
         path_parts = note_path.split('/')
         if len(path_parts) >= 2:
             episode_name = path_parts[1]
+            # Check if this is the index page (no file after episode name, or explicitly index)
+            is_episode_index = len(path_parts) == 2 or (len(path_parts) == 3 and path_parts[2] == "index")
 
     return templates.TemplateResponse(
         "note.html",
@@ -329,6 +332,7 @@ async def view_note(request: Request, note_path: str):
             "flash_messages": get_flashed_messages(request),
             "is_episode": is_episode,
             "episode_name": episode_name,
+            "is_episode_index": is_episode_index,
         }
     )
 
