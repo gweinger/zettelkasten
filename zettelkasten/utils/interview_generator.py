@@ -195,13 +195,15 @@ Episode with {guest_name}.
 """
         index_file.write_text(index_content, encoding='utf-8')
 
-    def ensure_person_note(self, guest_name: str) -> None:
+    def ensure_person_note(self, guest_name: str, transcript_path: Optional[Path] = None, background: Optional[str] = None) -> None:
         """
         Ensure a person note exists in the permanent-notes directory for the guest.
-        Creates one if it doesn't exist.
+        Creates one if it doesn't exist, enriched with background information.
 
         Args:
             guest_name: Name of the guest
+            transcript_path: Optional path to prep transcript for extracting background
+            background: Optional background information about the guest
         """
         permanent_notes_dir = self.config.get_permanent_notes_path()
 
@@ -213,10 +215,16 @@ Episode with {guest_name}.
         if person_file.exists():
             return
 
-        # Create person note with basic frontmatter
+        # Extract background if not provided
+        if not background and transcript_path and transcript_path.exists():
+            extracted = self.extract_from_transcript(transcript_path)
+            background = extracted.get("background", "")
+
+        # Create person note with enriched content
         from datetime import datetime
         today = datetime.now().strftime('%Y-%m-%d')
 
+        # Build the note content
         person_content = f"""---
 title: "{guest_name}"
 date: {today}
@@ -225,6 +233,10 @@ tags: [person, guest]
 
 # {guest_name}
 
-Podcast guest.
 """
+        if background:
+            person_content += f"{background}\n"
+        else:
+            person_content += "Podcast guest.\n"
+
         person_file.write_text(person_content, encoding='utf-8')

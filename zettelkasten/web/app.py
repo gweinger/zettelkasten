@@ -556,8 +556,8 @@ async def generate_interview_questions_workflow(
         # Ensure episode index.md exists
         generator.ensure_episode_index(guest_name, episode_path)
 
-        # Create person note if it doesn't exist
-        generator.ensure_person_note(guest_name)
+        # Create person note if it doesn't exist (with background from transcript)
+        generator.ensure_person_note(guest_name, transcript_path=transcript_file)
 
         # Rebuild indices to add the episode and person to the knowledge base
         from zettelkasten.generators.index_generator import IndexGenerator
