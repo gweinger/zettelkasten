@@ -167,22 +167,31 @@ Transcript:
 
     def ensure_episode_index(self, guest_name: str, episode_path: Path) -> None:
         """
-        Ensure an index.md file exists in the episode directory.
-        Creates one if it doesn't exist.
+        Ensure an index.md file exists and is populated with all episode files.
+        Uses EpisodeManager to properly generate the index with file links.
 
         Args:
             guest_name: Name of the guest
             episode_path: Path to the episode directory
         """
         index_file = episode_path / "index.md"
-        if index_file.exists():
-            return
 
-        # Create index.md with basic frontmatter
-        from datetime import datetime
-        today = datetime.now().strftime('%Y-%m-%d')
+        # Use EpisodeManager to import/refresh the episode and regenerate index with all files
+        try:
+            from zettelkasten.utils.episode_manager import EpisodeManager
+            manager = EpisodeManager(self.config)
 
-        index_content = f"""---
+            # Import the episode which will regenerate the index.md with all files listed
+            manager.import_existing_episode(episode_path.name)
+        except Exception:
+            # Fallback: if import fails, create a basic index
+            if index_file.exists():
+                return
+
+            from datetime import datetime
+            today = datetime.now().strftime('%Y-%m-%d')
+
+            index_content = f"""---
 title: "{guest_name}"
 date: {today}
 type: episode
@@ -193,7 +202,7 @@ guest: "{guest_name}"
 
 Episode with {guest_name}.
 """
-        index_file.write_text(index_content, encoding='utf-8')
+            index_file.write_text(index_content, encoding='utf-8')
 
     def ensure_person_note(self, guest_name: str, transcript_path: Optional[Path] = None, background: Optional[str] = None) -> None:
         """
