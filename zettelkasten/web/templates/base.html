@@ -15,8 +15,8 @@
 
                 <!-- Zettelkasten Indexes Dropdown -->
                 <li class="nav-dropdown">
-                    <a href="#" class="nav-dropdown-trigger">Zettelkasten</a>
-                    <ul class="nav-submenu">
+                    <a href="/indexes/concepts" class="nav-dropdown-trigger" onclick="toggleDropdown(event)" data-dropdown-toggle="zettelkasten-menu">Zettelkasten</a>
+                    <ul class="nav-submenu" id="zettelkasten-menu">
                         <li><a href="/indexes/concepts" {% if active_section == 'concepts' %}class="active"{% endif %}>Concepts</a></li>
                         <li><a href="/indexes/people" {% if active_section == 'people' %}class="active"{% endif %}>People</a></li>
                         <li><a href="/indexes/sources" {% if active_section == 'sources' %}class="active"{% endif %}>Sources</a></li>
@@ -26,9 +26,8 @@
 
                 <!-- Workflows Dropdown -->
                 <li class="nav-dropdown">
-                    <a href="#" class="nav-dropdown-trigger">⚙️ Workflows</a>
-                    <ul class="nav-submenu">
-                        <li><a href="/workflows" {% if active_section == 'workflows' %}class="active"{% endif %}>Browse Workflows</a></li>
+                    <a href="/workflows" class="nav-dropdown-trigger" onclick="toggleDropdown(event)" data-dropdown-toggle="workflows-menu">⚙️ Workflows</a>
+                    <ul class="nav-submenu" id="workflows-menu">
                         <li><a href="/add-url" {% if active_section == 'add-url' %}class="active"{% endif %}>Add from URL</a></li>
                         <li><a href="/staging" {% if active_section == 'staging' %}class="active"{% endif %}>Staging Area</a></li>
                         <li><a href="/workflows/interview-questions" {% if active_section == 'interview-questions' %}class="active"{% endif %}>Generate Interview Questions</a></li>
@@ -45,5 +44,31 @@
     <footer>
         <p>Zettelkasten Web UI v0.1.0</p>
     </footer>
+
+    <script>
+        function toggleDropdown(event) {
+            const trigger = event.currentTarget;
+            const menuId = trigger.getAttribute('data-dropdown-toggle');
+            const menu = document.getElementById(menuId);
+
+            // Close all other menus
+            document.querySelectorAll('.nav-submenu').forEach(m => {
+                if (m.id !== menuId) {
+                    m.classList.remove('active');
+                }
+            });
+
+            // Toggle current menu
+            menu.classList.toggle('active');
+            event.stopPropagation();
+        }
+
+        // Close dropdowns when clicking elsewhere
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.nav-submenu').forEach(m => {
+                m.classList.remove('active');
+            });
+        });
+    </script>
 </body>
 </html>
