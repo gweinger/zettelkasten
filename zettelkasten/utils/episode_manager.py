@@ -61,6 +61,7 @@ class EpisodeManager:
     def _create_template_files(self, episode_dir: Path, episode: Episode) -> None:
         """
         Create template files for the episode.
+        Only creates files if they don't already exist (preserves existing content).
 
         Args:
             episode_dir: Path to episode directory
@@ -69,113 +70,118 @@ class EpisodeManager:
         # Create prep conversation transcript template
         if episode.prep_transcript:
             prep_file = episode_dir / episode.prep_transcript
-            prep_file.write_text(
-                "# Prep Conversation Transcript\n\n"
-                f"Episode: {episode.title}\n\n"
-                "<!-- Add prep conversation transcript here -->\n"
-            )
+            if not prep_file.exists():
+                prep_file.write_text(
+                    "# Prep Conversation Transcript\n\n"
+                    f"Episode: {episode.title}\n\n"
+                    "<!-- Add prep conversation transcript here -->\n"
+                )
 
         # Create interview questions template
         if episode.interview_questions:
             questions_file = episode_dir / episode.interview_questions
-            questions_content = [
-                f"# Interview Questions - {episode.title}",
-                "",
-            ]
-            if episode.guest_name:
-                questions_content.append(f"**Guest:** {episode.guest_name}")
-                questions_content.append("")
+            if not questions_file.exists():
+                questions_content = [
+                    f"# Interview Questions - {episode.title}",
+                    "",
+                ]
+                if episode.guest_name:
+                    questions_content.append(f"**Guest:** {episode.guest_name}")
+                    questions_content.append("")
 
-            questions_content.extend([
-                "## Opening Questions",
-                "",
-                "1. <!-- Add question here -->",
-                "",
-                "## Main Discussion",
-                "",
-                "1. <!-- Add question here -->",
-                "",
-                "## Closing Questions",
-                "",
-                "1. <!-- Add question here -->",
-                "",
-            ])
-            questions_file.write_text("\n".join(questions_content))
+                questions_content.extend([
+                    "## Opening Questions",
+                    "",
+                    "1. <!-- Add question here -->",
+                    "",
+                    "## Main Discussion",
+                    "",
+                    "1. <!-- Add question here -->",
+                    "",
+                    "## Closing Questions",
+                    "",
+                    "1. <!-- Add question here -->",
+                    "",
+                ])
+                questions_file.write_text("\n".join(questions_content))
 
         # Create RSS description template
         if episode.rss_description:
             rss_file = episode_dir / episode.rss_description
-            rss_content = [
-                f"# RSS Description - {episode.title}",
-                "",
-            ]
-            if episode.summary:
-                rss_content.append(episode.summary)
-                rss_content.append("")
-            else:
-                rss_content.append("<!-- Add RSS podcast description here -->")
-                rss_content.append("")
+            if not rss_file.exists():
+                rss_content = [
+                    f"# RSS Description - {episode.title}",
+                    "",
+                ]
+                if episode.summary:
+                    rss_content.append(episode.summary)
+                    rss_content.append("")
+                else:
+                    rss_content.append("<!-- Add RSS podcast description here -->")
+                    rss_content.append("")
 
-            if episode.guest_name:
-                rss_content.append(f"Guest: {episode.guest_name}")
-                rss_content.append("")
+                if episode.guest_name:
+                    rss_content.append(f"Guest: {episode.guest_name}")
+                    rss_content.append("")
 
-            rss_content.extend([
-                "## Show Notes",
-                "",
-                "<!-- Add show notes here -->",
-                "",
-            ])
-            rss_file.write_text("\n".join(rss_content))
+                rss_content.extend([
+                    "## Show Notes",
+                    "",
+                    "<!-- Add show notes here -->",
+                    "",
+                ])
+                rss_file.write_text("\n".join(rss_content))
 
         # Create YouTube description template
         if episode.youtube_description:
             youtube_file = episode_dir / episode.youtube_description
-            youtube_content = [
-                f"# YouTube Description - {episode.title}",
-                "",
-            ]
-            if episode.summary:
-                youtube_content.append(episode.summary)
-                youtube_content.append("")
-            else:
-                youtube_content.append("<!-- Add YouTube description here -->")
-                youtube_content.append("")
+            if not youtube_file.exists():
+                youtube_content = [
+                    f"# YouTube Description - {episode.title}",
+                    "",
+                ]
+                if episode.summary:
+                    youtube_content.append(episode.summary)
+                    youtube_content.append("")
+                else:
+                    youtube_content.append("<!-- Add YouTube description here -->")
+                    youtube_content.append("")
 
-            youtube_content.extend([
-                "## Timestamps",
-                "",
-                "0:00 - Intro",
-                "<!-- Add timestamps here -->",
-                "",
-                "## Links",
-                "",
-                "<!-- Add relevant links here -->",
-                "",
-            ])
-            youtube_file.write_text("\n".join(youtube_content))
+                youtube_content.extend([
+                    "## Timestamps",
+                    "",
+                    "0:00 - Intro",
+                    "<!-- Add timestamps here -->",
+                    "",
+                    "## Links",
+                    "",
+                    "<!-- Add relevant links here -->",
+                    "",
+                ])
+                youtube_file.write_text("\n".join(youtube_content))
 
         # Create Substack description template
         if episode.substack_description:
             substack_file = episode_dir / episode.substack_description
-            substack_content = [
-                f"# Substack Description - {episode.title}",
-                "",
-            ]
-            if episode.summary:
-                substack_content.append(episode.summary)
-                substack_content.append("")
-            else:
-                substack_content.append("<!-- Add Substack post content here -->")
-                substack_content.append("")
+            if not substack_file.exists():
+                substack_content = [
+                    f"# Substack Description - {episode.title}",
+                    "",
+                ]
+                if episode.summary:
+                    substack_content.append(episode.summary)
+                    substack_content.append("")
+                else:
+                    substack_content.append("<!-- Add Substack post content here -->")
+                    substack_content.append("")
 
-            substack_content.extend([
-                "## About This Episode",
-                "",
-                "<!-- Add episode details here -->",
-                "",
-            ])
-            substack_file.write_text("\n".join(substack_content))
+                substack_content.extend([
+                    "## About This Episode",
+                    "",
+                    "<!-- Add episode details here -->",
+                    "",
+                ])
+                substack_file.write_text("\n".join(substack_content))
 
     def list_episodes(self) -> list[str]:
         """
