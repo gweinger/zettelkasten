@@ -1237,6 +1237,9 @@ def extract_frontmatter_properties(content: str) -> dict:
 
             if value:
                 # Regular key: value pair
+                # Remove YAML quotes if present
+                if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                    value = value[1:-1]
                 properties[key] = value
                 current_key = None
             else:
